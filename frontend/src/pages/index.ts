@@ -1,0 +1,8 @@
+export { default as Login } from './Login';
+export { default as Register } from './Register';
+export { default as Dashboard } from './Dashboard';
+export { default as Productos } from './Productos';
+export { default as Inventario } from './Inventario';
+export { default as Movimientos } from './Movimientos';
+export { default as Categorias } from './Categorias';
+export { default as Distribuidores } from './Distribuidores';

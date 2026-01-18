@@ -1,0 +1,133 @@
+// Generador de schema.prisma
+// Este archivo es el esquema de la base de datos
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ============================================
+// MODELO: Usuario
+// ============================================
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nombre    String
+  rol       String   @default("USER") // ADMIN, USER
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  movimientos MovimientoInventario[]
+
+  @@map("users")
+}
+
+// ============================================
+// MODELO: Categoría
+// ============================================
+model Categoria {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @db.VarChar(100)
+  descripcion String?  @db.Text
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  productos Producto[]
+
+  @@map("categorias")
+}
+
+// ============================================
+// MODELO: Distribuidor
+// ============================================
+model Distribuidor {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @db.VarChar(200)
+  contacto  String?  @db.VarChar(100)
+  telefono  String?  @db.VarChar(20)
+  email     String?  @db.VarChar(100)
+  direccion String?  @db.Text
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  movimientos MovimientoInventario[]
+
+  @@map("distribuidores")
+}
+
+// ============================================
+// MODELO: Producto
+// ============================================
+model Producto {
+  id           Int      @id @default(autoincrement())
+  nombre       String   @db.VarChar(300)
+  descripcion  String?  @db.Text
+  categoriaId  Int      @map("categoria_id")
+  stockMinimo  Int      @default(0) @map("stock_minimo")
+  unidadMedida String?  @default("unidades") @map("unidad_medida") @db.VarChar(50)
+  precioCompra Decimal? @default(0) @map("precio_compra") @db.Decimal(12, 2)
+  precioVenta  Decimal? @default(0) @map("precio_venta") @db.Decimal(12, 2)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  categoria        Categoria             @relation(fields: [categoriaId], references: [id])
+  movimientos      MovimientoInventario[]
+  inventarioActual InventarioActual?
+
+  @@index([categoriaId], name: "idx_productos_categoria")
+  @@map("productos")
+}
+
+// ============================================
+// MODELO: Movimiento de Inventario
+// ============================================
+model MovimientoInventario {
+  id             Int       @id @default(autoincrement())
+  productoId     Int       @map("producto_id")
+  tipoMovimiento String    @map("tipo_movimiento") @db.VarChar(20) // COMPRA, VENTA, AJUSTE
+  cantidad       Int
+  precioUnitario Decimal   @map("precio_unitario") @db.Decimal(12, 2)
+  total          Decimal   @db.Decimal(12, 2)
+  distribuidorId Int?      @map("distribuidor_id")
+  factura        String?   @db.VarChar(100)
+  fecha          DateTime  @default(now())
+  usuarioId      Int?      @map("usuario_id")
+  notas          String?   @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relaciones
+  producto    Producto      @relation(fields: [productoId], references: [id])
+  distribuidor Distribuidor? @relation(fields: [distribuidorId], references: [id])
+  usuario     User?         @relation(fields: [usuarioId], references: [id])
+
+  @@index([fecha(sort: Desc)], name: "idx_movimientos_fecha")
+  @@index([productoId], name: "idx_movimientos_producto")
+  @@index([tipoMovimiento], name: "idx_movimientos_tipo")
+  @@map("movimientos_inventario")
+}
+
+// ============================================
+// MODELO: Inventario Actual
+// ============================================
+model InventarioActual {
+  productoId          Int      @id @map("producto_id")
+  cantidadActual      Int      @default(0) @map("cantidad_actual")
+  ultimaActualizacion DateTime @default(now()) @updatedAt @map("ultima_actualizacion")
+
+  // Relaciones
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@map("inventario_actual")
+}
