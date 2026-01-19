@@ -30,11 +30,6 @@ export const createMovimientoSchema = z.object({
     .max(100, 'El número de factura no puede exceder 100 caracteres')
     .optional()
     .nullable(),
-  notas: z
-    .string()
-    .max(500, 'Las notas no pueden exceder 500 caracteres')
-    .optional()
-    .nullable(),
   fecha: z
     .string()
     .datetime()

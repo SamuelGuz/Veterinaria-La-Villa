@@ -13,8 +13,12 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Loader2,
-  BarChart3
+  BarChart3,
+  Plus,
+  Minus
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 import {
   AreaChart,
   Area,
@@ -69,6 +73,7 @@ interface ComparativaMensual {
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [stockBajo, setStockBajo] = useState<ProductoStockBajo[]>([]);
   const [topProductos, setTopProductos] = useState<TopProducto[]>([]);
@@ -110,11 +115,29 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Resumen general del inventario de Veterinaria La Villa
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Resumen general del inventario de Veterinaria La Villa
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => navigate('/movimientos?action=compra')}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva Compra
+          </Button>
+          <Button 
+            onClick={() => navigate('/movimientos?action=venta')}
+            variant="destructive"
+          >
+            <Minus className="h-4 w-4 mr-2" />
+            Nueva Venta
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

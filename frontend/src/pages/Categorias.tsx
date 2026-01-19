@@ -93,7 +93,7 @@ export default function Categorias() {
   const fetchData = async () => {
     try {
       const response = await categoriasApi.getAll();
-      setCategorias(response.data);
+      setCategorias(response.data.data || []);
     } catch (error) {
       toast({
         title: 'Error',

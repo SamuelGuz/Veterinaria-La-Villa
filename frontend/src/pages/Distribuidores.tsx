@@ -98,7 +98,7 @@ export default function Distribuidores() {
   const fetchData = async () => {
     try {
       const response = await distribuidoresApi.getAll();
-      setDistribuidores(response.data);
+      setDistribuidores(response.data.data || []);
     } catch (error) {
       toast({
         title: 'Error',

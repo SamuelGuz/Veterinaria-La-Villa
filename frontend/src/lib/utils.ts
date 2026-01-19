@@ -14,12 +14,31 @@ export function formatCurrency(amount: number): string {
 }
 
 // Formatear fecha
-export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat('es-MX', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(new Date(date));
+export function formatDate(date: string | Date, includeTime: boolean = false): string {
+  if (!date) return '-';
+  
+  try {
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) return '-';
+    
+    if (includeTime) {
+      return new Intl.DateTimeFormat('es-MX', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(dateObj);
+    }
+    
+    return new Intl.DateTimeFormat('es-MX', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(dateObj);
+  } catch (error) {
+    return '-';
+  }
 }
 
 // Formatear fecha corta

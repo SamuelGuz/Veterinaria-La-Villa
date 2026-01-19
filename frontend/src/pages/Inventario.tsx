@@ -59,7 +59,7 @@ export default function Inventario() {
   const fetchData = async () => {
     try {
       const response = await productosApi.getAll({ activo: true });
-      setProductos(response.data);
+      setProductos(response.data.data || []);
     } catch (error) {
       toast({
         title: 'Error',

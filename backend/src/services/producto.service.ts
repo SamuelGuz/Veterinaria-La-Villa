@@ -43,7 +43,7 @@ export const getProductos = async (query: QueryProductosInput) => {
     ...(categoriaId && { categoriaId }),
   };
 
-  // Obtener productos
+  // Obtener productos con el último movimiento de compra
   let productos = await prisma.producto.findMany({
     where,
     include: {
@@ -52,6 +52,12 @@ export const getProductos = async (query: QueryProductosInput) => {
       },
       inventarioActual: {
         select: { cantidadActual: true, ultimaActualizacion: true },
+      },
+      movimientos: {
+        where: { tipoMovimiento: 'COMPRA' },
+        orderBy: { fecha: 'desc' },
+        take: 1,
+        select: { fecha: true, distribuidorId: true, distribuidor: { select: { nombre: true } } },
       },
     },
     orderBy: { [orderBy]: order },
@@ -70,11 +76,17 @@ export const getProductos = async (query: QueryProductosInput) => {
   const total = await prisma.producto.count({ where });
 
   return {
-    data: productos.map((p) => ({
-      ...p,
-      stockActual: p.inventarioActual?.cantidadActual || 0,
-      stockBajo: (p.inventarioActual?.cantidadActual || 0) <= p.stockMinimo,
-    })),
+    data: productos.map((p) => {
+      const ultimaCompra = p.movimientos[0] || null;
+      return {
+        ...p,
+        stockActual: p.inventarioActual?.cantidadActual || 0,
+        stockBajo: (p.inventarioActual?.cantidadActual || 0) <= p.stockMinimo,
+        ultimaFechaCompra: ultimaCompra?.fecha || null,
+        ultimoDistribuidor: ultimaCompra?.distribuidor?.nombre || null,
+        movimientos: undefined, // No enviar la lista completa de movimientos
+      };
+    }),
     pagination: {
       page,
       limit,

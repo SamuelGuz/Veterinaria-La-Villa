@@ -62,21 +62,21 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 const productoSchema = z.object({
-  codigo: z.string().min(1, 'El código es requerido'),
   nombre: z.string().min(1, 'El nombre es requerido'),
   descripcion: z.string().optional(),
   categoriaId: z.string().min(1, 'La categoría es requerida'),
-  distribuidorId: z.string().optional(),
   precioCompra: z.number().min(0, 'El precio debe ser mayor o igual a 0'),
   precioVenta: z.number().min(0, 'El precio debe ser mayor o igual a 0'),
   stockMinimo: z.number().int().min(0, 'El stock mínimo debe ser mayor o igual a 0'),
-  stockMaximo: z.number().int().min(0, 'El stock máximo debe ser mayor o igual a 0'),
   unidadMedida: z.string().optional(),
-  ubicacion: z.string().optional(),
   activo: z.boolean(),
 });
 
@@ -117,13 +117,13 @@ export default function Productos() {
   const fetchData = async () => {
     try {
       const [productosRes, categoriasRes, distribuidoresRes] = await Promise.all([
-        productosApi.getAll(),
+        productosApi.getAll({ limit: 1000 }),
         categoriasApi.getAll(),
         distribuidoresApi.getAll(),
       ]);
-      setProductos(productosRes.data);
-      setCategorias(categoriasRes.data);
-      setDistribuidores(distribuidoresRes.data);
+      setProductos(productosRes.data.data || []);
+      setCategorias(categoriasRes.data.data || []);
+      setDistribuidores(distribuidoresRes.data.data || []);
     } catch (error) {
       toast({
         title: 'Error',
@@ -142,17 +142,13 @@ export default function Productos() {
   const openCreateModal = () => {
     setEditingProducto(null);
     reset({
-      codigo: '',
       nombre: '',
       descripcion: '',
       categoriaId: '',
-      distribuidorId: '',
       precioCompra: 0,
       precioVenta: 0,
       stockMinimo: 10,
-      stockMaximo: 100,
-      unidadMedida: 'Unidad',
-      ubicacion: '',
+      unidadMedida: 'unidades',
       activo: true,
     });
     setIsModalOpen(true);
@@ -161,17 +157,13 @@ export default function Productos() {
   const openEditModal = (producto: Producto) => {
     setEditingProducto(producto);
     reset({
-      codigo: producto.codigo,
       nombre: producto.nombre,
       descripcion: producto.descripcion || '',
-      categoriaId: producto.categoriaId,
-      distribuidorId: producto.distribuidorId || '',
+      categoriaId: String(producto.categoriaId),
       precioCompra: Number(producto.precioCompra),
       precioVenta: Number(producto.precioVenta),
       stockMinimo: producto.stockMinimo,
-      stockMaximo: producto.stockMaximo,
-      unidadMedida: producto.unidadMedida || 'Unidad',
-      ubicacion: producto.ubicacion || '',
+      unidadMedida: producto.unidadMedida || 'unidades',
       activo: producto.activo,
     });
     setIsModalOpen(true);
@@ -184,14 +176,26 @@ export default function Productos() {
 
   const onSubmit = async (data: ProductoFormData) => {
     try {
+      // Preparar datos para el backend (solo campos que acepta)
+      const payload = {
+        nombre: data.nombre,
+        descripcion: data.descripcion || null,
+        categoriaId: parseInt(data.categoriaId),
+        stockMinimo: data.stockMinimo,
+        unidadMedida: data.unidadMedida || 'unidades',
+        precioCompra: data.precioCompra,
+        precioVenta: data.precioVenta,
+        activo: data.activo,
+      };
+      
       if (editingProducto) {
-        await productosApi.update(editingProducto.id, data);
+        await productosApi.update(editingProducto.id, payload);
         toast({
           title: 'Éxito',
           description: 'Producto actualizado correctamente',
         });
       } else {
-        await productosApi.create(data);
+        await productosApi.create(payload);
         toast({
           title: 'Éxito',
           description: 'Producto creado correctamente',
@@ -230,17 +234,17 @@ export default function Productos() {
 
   const columns = useMemo<ColumnDef<Producto>[]>(() => [
     {
-      accessorKey: 'codigo',
+      accessorKey: 'id',
       header: ({ column }) => (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
         >
-          Código
+          ID
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
-      cell: ({ row }) => <span className="font-mono">{row.getValue('codigo')}</span>,
+      cell: ({ row }) => <span className="font-mono">#{row.getValue('id')}</span>,
     },
     {
       accessorKey: 'nombre',
@@ -272,17 +276,29 @@ export default function Productos() {
       cell: ({ row }) => formatCurrency(Number(row.getValue('precioVenta'))),
     },
     {
-      accessorKey: 'inventario',
+      accessorKey: 'stockActual',
       header: 'Stock',
       cell: ({ row }) => {
-        const inventario = row.original.inventario;
-        const cantidad = inventario?.cantidad || 0;
+        const cantidad = row.original.stockActual ?? row.original.inventarioActual?.cantidadActual ?? 0;
         const stockMinimo = row.original.stockMinimo;
         const isLow = cantidad <= stockMinimo;
         return (
           <Badge variant={isLow ? 'destructive' : 'secondary'}>
             {cantidad}
           </Badge>
+        );
+      },
+    },
+    {
+      accessorKey: 'ultimaFechaCompra',
+      header: 'Últ. Compra',
+      cell: ({ row }) => {
+        const fecha = row.original.ultimaFechaCompra;
+        if (!fecha) return <span className="text-muted-foreground text-sm">-</span>;
+        return (
+          <span className="text-sm">
+            {formatDate(fecha)}
+          </span>
         );
       },
     },
@@ -349,6 +365,18 @@ export default function Productos() {
     );
   }
 
+  // Calcular estadísticas
+  const stats = {
+    total: productos.length,
+    stockBajo: productos.filter(p => (p.stockActual ?? p.inventarioActual?.cantidadActual ?? 0) <= p.stockMinimo).length,
+    stockNormal: productos.filter(p => {
+      const stock = p.stockActual ?? p.inventarioActual?.cantidadActual ?? 0;
+      return stock > p.stockMinimo && stock <= p.stockMinimo * 3;
+    }).length,
+    stockAlto: productos.filter(p => (p.stockActual ?? p.inventarioActual?.cantidadActual ?? 0) > p.stockMinimo * 3).length,
+    valorTotal: productos.reduce((acc, p) => acc + ((p.stockActual ?? p.inventarioActual?.cantidadActual ?? 0) * (Number(p.precioVenta) || 0)), 0),
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -363,6 +391,55 @@ export default function Productos() {
           <Plus className="mr-2 h-4 w-4" />
           Nuevo Producto
         </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-5">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Productos</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.total}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Stock Bajo</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{stats.stockBajo}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Stock Normal</CardTitle>
+            <TrendingUp className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{stats.stockNormal}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Stock Alto</CardTitle>
+            <TrendingDown className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{stats.stockAlto}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(stats.valorTotal)}</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Table Card */}
@@ -476,21 +553,12 @@ export default function Productos() {
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)}>
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="codigo">Código *</Label>
-                  <Input id="codigo" {...register('codigo')} />
-                  {errors.codigo && (
-                    <p className="text-sm text-red-500">{errors.codigo.message}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="nombre">Nombre *</Label>
-                  <Input id="nombre" {...register('nombre')} />
-                  {errors.nombre && (
-                    <p className="text-sm text-red-500">{errors.nombre.message}</p>
-                  )}
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="nombre">Nombre *</Label>
+                <Input id="nombre" {...register('nombre')} />
+                {errors.nombre && (
+                  <p className="text-sm text-red-500">{errors.nombre.message}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -498,46 +566,26 @@ export default function Productos() {
                 <Input id="descripcion" {...register('descripcion')} />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="categoriaId">Categoría *</Label>
-                  <Select
-                    value={watch('categoriaId')}
-                    onValueChange={(value) => setValue('categoriaId', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar categoría" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categorias.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.categoriaId && (
-                    <p className="text-sm text-red-500">{errors.categoriaId.message}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="distribuidorId">Distribuidor</Label>
-                  <Select
-                    value={watch('distribuidorId') || ''}
-                    onValueChange={(value) => setValue('distribuidorId', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar distribuidor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {distribuidores.map((dist) => (
-                        <SelectItem key={dist.id} value={dist.id}>
-                          {dist.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="categoriaId">Categoría *</Label>
+                <Select
+                  value={watch('categoriaId')}
+                  onValueChange={(value) => setValue('categoriaId', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categorias.map((cat) => (
+                      <SelectItem key={cat.id} value={String(cat.id)}>
+                        {cat.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.categoriaId && (
+                  <p className="text-sm text-red-500">{errors.categoriaId.message}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -580,42 +628,24 @@ export default function Productos() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="stockMaximo">Stock Máximo *</Label>
-                  <Input
-                    id="stockMaximo"
-                    type="number"
-                    {...register('stockMaximo', { valueAsNumber: true })}
-                  />
-                  {errors.stockMaximo && (
-                    <p className="text-sm text-red-500">{errors.stockMaximo.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
                   <Label htmlFor="unidadMedida">Unidad de Medida</Label>
                   <Select
-                    value={watch('unidadMedida') || 'Unidad'}
+                    value={watch('unidadMedida') || 'unidades'}
                     onValueChange={(value) => setValue('unidadMedida', value)}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Unidad">Unidad</SelectItem>
-                      <SelectItem value="Caja">Caja</SelectItem>
-                      <SelectItem value="Paquete">Paquete</SelectItem>
-                      <SelectItem value="Litro">Litro</SelectItem>
-                      <SelectItem value="Kilogramo">Kilogramo</SelectItem>
-                      <SelectItem value="Gramo">Gramo</SelectItem>
-                      <SelectItem value="Mililitro">Mililitro</SelectItem>
+                      <SelectItem value="unidades">Unidades</SelectItem>
+                      <SelectItem value="caja">Caja</SelectItem>
+                      <SelectItem value="paquete">Paquete</SelectItem>
+                      <SelectItem value="litro">Litro</SelectItem>
+                      <SelectItem value="kilogramo">Kilogramo</SelectItem>
+                      <SelectItem value="gramo">Gramo</SelectItem>
+                      <SelectItem value="mililitro">Mililitro</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ubicacion">Ubicación</Label>
-                  <Input id="ubicacion" {...register('ubicacion')} />
                 </div>
               </div>
 

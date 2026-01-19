@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,8 +13,8 @@ import {
   ColumnDef,
   SortingState,
 } from '@tanstack/react-table';
-import { movimientosApi, productosApi } from '@/lib/api';
-import { MovimientoInventario, Producto } from '@/lib/api';
+import { movimientosApi, productosApi, distribuidoresApi } from '@/lib/api';
+import { MovimientoInventario, Producto, Distribuidor } from '@/lib/api';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,33 +60,38 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-type TipoMovimiento = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'DEVOLUCION';
+type TipoMovimiento = 'COMPRA' | 'VENTA' | 'AJUSTE';
 
 const movimientoSchema = z.object({
   productoId: z.string().min(1, 'El producto es requerido'),
-  tipoMovimiento: z.enum(['ENTRADA', 'SALIDA', 'AJUSTE', 'DEVOLUCION']),
+  tipoMovimiento: z.enum(['COMPRA', 'VENTA', 'AJUSTE']),
   cantidad: z.number().int().min(1, 'La cantidad debe ser mayor a 0'),
   precioUnitario: z.number().min(0, 'El precio debe ser mayor o igual a 0'),
-  referencia: z.string().optional(),
-  notas: z.string().optional(),
+  distribuidorId: z.string().optional(),
+  factura: z.string().optional(),
 });
 
 type MovimientoFormData = z.infer<typeof movimientoSchema>;
 
-const tipoMovimientoConfig = {
+const tipoMovimientoConfig: Record<string, { label: string; icon: any; color: string; bg: string }> = {
+  COMPRA: { label: 'Compra', icon: ArrowUpRight, color: 'text-green-600', bg: 'bg-green-100' },
+  VENTA: { label: 'Venta', icon: ArrowDownRight, color: 'text-red-600', bg: 'bg-red-100' },
+  AJUSTE: { label: 'Ajuste', icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-100' },
   ENTRADA: { label: 'Entrada', icon: ArrowUpRight, color: 'text-green-600', bg: 'bg-green-100' },
   SALIDA: { label: 'Salida', icon: ArrowDownRight, color: 'text-red-600', bg: 'bg-red-100' },
-  AJUSTE: { label: 'Ajuste', icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-100' },
   DEVOLUCION: { label: 'Devolución', icon: ArrowLeftRight, color: 'text-orange-600', bg: 'bg-orange-100' },
 };
 
 export default function Movimientos() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [distribuidores, setDistribuidores] = useState<Distribuidor[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'fechaMovimiento', desc: true }]);
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'fecha', desc: true }]);
   const [globalFilter, setGlobalFilter] = useState('');
+  const [productoSearch, setProductoSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState<TipoMovimiento | 'all'>('all');
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const { toast } = useToast();
@@ -113,8 +119,10 @@ export default function Movimientos() {
     if (selectedProductoId) {
       const producto = productos.find((p) => p.id === selectedProductoId);
       if (producto) {
-        if (selectedTipoMovimiento === 'ENTRADA') {
-          setValue('precioUnitario', Number(producto.precioCompra));
+        if (selectedTipoMovimiento === 'COMPRA') {
+          setValue('precioUnitario', Number(producto.precioCompra) || 0);
+        } else if (selectedTipoMovimiento === 'VENTA') {
+          setValue('precioUnitario', Number(producto.precioVenta) || 0);
         } else {
           setValue('precioUnitario', Number(producto.precioVenta));
         }
@@ -124,12 +132,14 @@ export default function Movimientos() {
 
   const fetchData = async () => {
     try {
-      const [movimientosRes, productosRes] = await Promise.all([
-        movimientosApi.getAll(),
-        productosApi.getAll({ activo: true }),
+      const [movimientosRes, productosRes, distribuidoresRes] = await Promise.all([
+        movimientosApi.getAll({ limit: 500 }),
+        productosApi.getAll({ activo: true, limit: 1000 }),
+        distribuidoresApi.getAll(),
       ]);
-      setMovimientos(movimientosRes.data);
-      setProductos(productosRes.data);
+      setMovimientos(movimientosRes.data.data || []);
+      setProductos(productosRes.data.data || []);
+      setDistribuidores(distribuidoresRes.data.data || []);
     } catch (error) {
       toast({
         title: 'Error',
@@ -141,6 +151,43 @@ export default function Movimientos() {
     }
   };
 
+  // Detectar parámetro de URL para abrir modal automáticamente
+  useEffect(() => {
+    const action = searchParams.get('action');
+    if (action && productos.length > 0) {
+      const tipoMap: Record<string, TipoMovimiento> = {
+        'compra': 'COMPRA',
+        'venta': 'VENTA',
+        'ajuste': 'AJUSTE'
+      };
+      const tipo = tipoMap[action.toLowerCase()];
+      if (tipo) {
+        reset({
+          productoId: '',
+          tipoMovimiento: tipo,
+          cantidad: 1,
+          precioUnitario: 0,
+          distribuidorId: '',
+          factura: '',
+        });
+        setProductoSearch('');
+        setIsModalOpen(true);
+        // Limpiar el parámetro de URL
+        setSearchParams({});
+      }
+    }
+  }, [searchParams, productos]);
+
+  // Filtrar productos por búsqueda
+  const productosFiltrados = useMemo(() => {
+    if (!productoSearch) return productos;
+    const search = productoSearch.toLowerCase();
+    return productos.filter(p => 
+      p.nombre.toLowerCase().includes(search) || 
+      p.codigo?.toLowerCase().includes(search)
+    );
+  }, [productos, productoSearch]);
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -149,12 +196,12 @@ export default function Movimientos() {
     return movimientos.filter((mov) => {
       if (tipoFilter !== 'all' && mov.tipoMovimiento !== tipoFilter) return false;
       if (dateFilter.from) {
-        const movDate = new Date(mov.fechaMovimiento);
+        const movDate = new Date(mov.fecha);
         const fromDate = new Date(dateFilter.from);
         if (movDate < fromDate) return false;
       }
       if (dateFilter.to) {
-        const movDate = new Date(mov.fechaMovimiento);
+        const movDate = new Date(mov.fecha);
         const toDate = new Date(dateFilter.to);
         toDate.setHours(23, 59, 59);
         if (movDate > toDate) return false;
@@ -166,18 +213,27 @@ export default function Movimientos() {
   const openCreateModal = () => {
     reset({
       productoId: '',
-      tipoMovimiento: 'ENTRADA',
+      tipoMovimiento: 'COMPRA',
       cantidad: 1,
       precioUnitario: 0,
-      referencia: '',
-      notas: '',
+      distribuidorId: '',
+      factura: '',
     });
+    setProductoSearch('');
     setIsModalOpen(true);
   };
 
   const onSubmit = async (data: MovimientoFormData) => {
     try {
-      await movimientosApi.create(data);
+      await movimientosApi.create({
+        productoId: parseInt(data.productoId),
+        tipoMovimiento: data.tipoMovimiento as 'COMPRA' | 'VENTA' | 'AJUSTE',
+        cantidad: data.cantidad,
+        precioUnitario: data.precioUnitario,
+        distribuidorId: data.distribuidorId ? parseInt(data.distribuidorId) : null,
+        factura: data.factura || null,
+        notas: data.notas || null,
+      });
       toast({
         title: 'Éxito',
         description: 'Movimiento registrado correctamente',
@@ -203,7 +259,7 @@ export default function Movimientos() {
 
   const columns = useMemo<ColumnDef<MovimientoInventario>[]>(() => [
     {
-      accessorKey: 'fechaMovimiento',
+      accessorKey: 'fecha',
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -213,14 +269,17 @@ export default function Movimientos() {
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
-      cell: ({ row }) => formatDate(row.getValue('fechaMovimiento'), true),
+      cell: ({ row }) => {
+        const fecha = row.getValue('fecha') as string;
+        return formatDate(fecha, true);
+      },
     },
     {
       accessorKey: 'tipoMovimiento',
       header: 'Tipo',
       cell: ({ row }) => {
-        const tipo = row.getValue('tipoMovimiento') as TipoMovimiento;
-        const config = tipoMovimientoConfig[tipo];
+        const tipo = row.getValue('tipoMovimiento') as string;
+        const config = tipoMovimientoConfig[tipo] || tipoMovimientoConfig['AJUSTE'];
         const Icon = config.icon;
         return (
           <div className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium', config.bg, config.color)}>
@@ -256,7 +315,7 @@ export default function Movimientos() {
       cell: ({ row }) => {
         const tipo = row.original.tipoMovimiento;
         const cantidad = row.getValue('cantidad') as number;
-        const isNegative = tipo === 'SALIDA';
+        const isNegative = tipo === 'VENTA';
         return (
           <span className={cn('font-medium', isNegative ? 'text-red-600' : 'text-green-600')}>
             {isNegative ? '-' : '+'}{cantidad}
@@ -488,7 +547,7 @@ export default function Movimientos() {
           <DialogHeader>
             <DialogTitle>Nuevo Movimiento</DialogTitle>
             <DialogDescription>
-              Registra una entrada, salida o ajuste de inventario
+              Registra una compra, venta o ajuste de inventario
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)}>
@@ -503,16 +562,16 @@ export default function Movimientos() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ENTRADA">
+                    <SelectItem value="COMPRA">
                       <div className="flex items-center gap-2">
                         <ArrowUpRight className="h-4 w-4 text-green-600" />
-                        Entrada
+                        Compra (Entrada)
                       </div>
                     </SelectItem>
-                    <SelectItem value="SALIDA">
+                    <SelectItem value="VENTA">
                       <div className="flex items-center gap-2">
                         <ArrowDownRight className="h-4 w-4 text-red-600" />
-                        Salida
+                        Venta (Salida)
                       </div>
                     </SelectItem>
                     <SelectItem value="AJUSTE">
@@ -521,38 +580,50 @@ export default function Movimientos() {
                         Ajuste
                       </div>
                     </SelectItem>
-                    <SelectItem value="DEVOLUCION">
-                      <div className="flex items-center gap-2">
-                        <ArrowLeftRight className="h-4 w-4 text-orange-600" />
-                        Devolución
-                      </div>
-                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="productoId">Producto *</Label>
-                <Select
-                  value={watch('productoId')}
-                  onValueChange={(value) => setValue('productoId', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar producto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {productos.map((producto) => (
-                      <SelectItem key={producto.id} value={producto.id}>
-                        <div className="flex items-center justify-between gap-4">
-                          <span>{producto.nombre}</span>
-                          <Badge variant="outline" className="text-xs">
-                            Stock: {producto.inventario?.cantidad || 0}
-                          </Badge>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Buscar producto..."
+                    value={productoSearch}
+                    onChange={(e) => setProductoSearch(e.target.value)}
+                    className="mb-2"
+                  />
+                  <Select
+                    value={watch('productoId')}
+                    onValueChange={(value) => setValue('productoId', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar producto" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {productosFiltrados.length > 0 ? (
+                        productosFiltrados.map((producto) => (
+                          <SelectItem key={producto.id} value={producto.id}>
+                            <div className="flex items-center justify-between gap-4 w-full">
+                              <span className="flex-1">{producto.nombre}</span>
+                              <Badge variant={
+                                (producto.stockActual || producto.inventarioActual?.cantidadActual || 0) === 0 
+                                  ? 'destructive' 
+                                  : 'secondary'
+                              } className="text-xs">
+                                Stock: {producto.stockActual || producto.inventarioActual?.cantidadActual || 0}
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-sm text-muted-foreground text-center">
+                          No se encontraron productos
                         </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
                 {errors.productoId && (
                   <p className="text-sm text-red-500">{errors.productoId.message}</p>
                 )}
@@ -571,38 +642,54 @@ export default function Movimientos() {
                     <p className="text-sm text-red-500">{errors.cantidad.message}</p>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="precioUnitario">Precio Unitario *</Label>
-                  <Input
-                    id="precioUnitario"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    {...register('precioUnitario', { valueAsNumber: true })}
-                  />
-                  {errors.precioUnitario && (
-                    <p className="text-sm text-red-500">{errors.precioUnitario.message}</p>
-                  )}
-                </div>
+                {selectedTipoMovimiento === 'COMPRA' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="precioUnitario">Precio Unitario *</Label>
+                    <Input
+                      id="precioUnitario"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      {...register('precioUnitario', { valueAsNumber: true })}
+                    />
+                    {errors.precioUnitario && (
+                      <p className="text-sm text-red-500">{errors.precioUnitario.message}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="referencia">Referencia</Label>
-                <Input
-                  id="referencia"
-                  placeholder="Ej: Factura #123, Orden de compra #456"
-                  {...register('referencia')}
-                />
-              </div>
+              {selectedTipoMovimiento === 'COMPRA' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="distribuidorId">Distribuidor</Label>
+                    <Select
+                      value={watch('distribuidorId') || ''}
+                      onValueChange={(value) => setValue('distribuidorId', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar distribuidor (opcional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {distribuidores.map((dist) => (
+                          <SelectItem key={dist.id} value={String(dist.id)}>
+                            {dist.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="notas">Notas</Label>
-                <Input
-                  id="notas"
-                  placeholder="Observaciones adicionales..."
-                  {...register('notas')}
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="factura">Número de Factura</Label>
+                    <Input
+                      id="factura"
+                      placeholder="Ej: F-12345"
+                      {...register('factura')}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>

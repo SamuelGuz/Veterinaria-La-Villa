@@ -139,7 +139,6 @@ export const createMovimiento = async (
       total,
       distribuidorId: data.distribuidorId,
       factura: data.factura,
-      notas: data.notas,
       fecha: data.fecha || new Date(),
       usuarioId,
     },

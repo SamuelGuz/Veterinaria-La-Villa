@@ -102,18 +102,29 @@ export interface Distribuidor {
 }
 
 export interface Producto {
-  id: number;
+  id: string;
+  codigo: string;
   nombre: string;
   descripcion: string | null;
-  categoriaId: number;
+  categoriaId: string;
   categoria: { id: number; nombre: string };
+  distribuidorId?: string | null;
+  distribuidor?: { id: number; nombre: string } | null;
   stockMinimo: number;
+  stockMaximo: number;
   unidadMedida: string | null;
+  ubicacion?: string | null;
   precioCompra: number | null;
   precioVenta: number | null;
   activo: boolean;
   stockActual?: number;
   stockBajo?: boolean;
+  ultimaFechaCompra?: string | null;
+  ultimoDistribuidor?: string | null;
+  inventario?: {
+    cantidad: number;
+    ultimaActualizacion: string;
+  } | null;
   inventarioActual?: {
     cantidadActual: number;
     ultimaActualizacion: string;
@@ -125,8 +136,8 @@ export interface Producto {
 export interface Movimiento {
   id: number;
   productoId: number;
-  producto: { id: number; nombre: string; unidadMedida: string | null };
-  tipoMovimiento: 'COMPRA' | 'VENTA' | 'AJUSTE';
+  producto: { id: number; nombre: string; codigo?: string; unidadMedida: string | null };
+  tipoMovimiento: 'COMPRA' | 'VENTA' | 'AJUSTE' | 'ENTRADA' | 'SALIDA' | 'DEVOLUCION';
   cantidad: number;
   precioUnitario: number;
   total: number;
@@ -134,11 +145,16 @@ export interface Movimiento {
   distribuidor: { id: number; nombre: string } | null;
   factura: string | null;
   fecha: string;
+  fechaMovimiento?: string; // Alias for compatibility
   usuarioId: number | null;
   usuario: { id: number; nombre: string } | null;
   notas: string | null;
+  referencia?: string | null;
   createdAt: string;
 }
+
+// Alias for backwards compatibility
+export type MovimientoInventario = Movimiento;
 
 // ============================================
 // SERVICIOS DE API

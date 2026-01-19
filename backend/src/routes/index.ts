@@ -4,6 +4,7 @@ import productoRoutes from './producto.routes';
 import catalogoRoutes from './catalogo.routes';
 import movimientoRoutes from './movimiento.routes';
 import estadisticasRoutes from './estadisticas.routes';
+import distribuidorRoutes from './distribuidor.routes';
 
 const router = Router();
 
@@ -13,6 +14,7 @@ router.use('/productos', productoRoutes);
 router.use('/catalogo', catalogoRoutes);
 router.use('/movimientos', movimientoRoutes);
 router.use('/estadisticas', estadisticasRoutes);
+router.use('/distribuidores', distribuidorRoutes);
 
 // Ruta de health check
 router.get('/health', (req, res) => {

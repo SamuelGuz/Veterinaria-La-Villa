@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
   Package,
-  Boxes,
   ArrowRightLeft,
   Tags,
   Truck,
@@ -25,11 +24,6 @@ const menuItems = [
     title: 'Productos',
     icon: Package,
     href: '/productos',
-  },
-  {
-    title: 'Inventario',
-    icon: Boxes,
-    href: '/inventario',
   },
   {
     title: 'Movimientos',
