@@ -39,43 +39,45 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-green-50 to-green-100 p-4">
-      <Card className="w-full max-w-md shadow-xl">
-        <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary">
-            <span className="text-3xl font-bold text-white">V</span>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-green-50 to-green-100 p-3 sm:p-4">
+      <Card className="w-full max-w-[95vw] sm:max-w-md shadow-xl">
+        <CardHeader className="space-y-1 text-center p-4 sm:p-6">
+          <div className="mx-auto mb-2 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-primary">
+            <span className="text-xl sm:text-3xl font-bold text-white">V</span>
           </div>
-          <CardTitle className="text-2xl font-bold">Veterinaria La Villa</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-xl sm:text-2xl font-bold">Veterinaria La Villa</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Sistema de Gestión de Inventario
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6">
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
+              <div className="rounded-md bg-red-50 p-2 sm:p-3 text-xs sm:text-sm text-red-600">
                 {error}
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="email">Correo Electrónico</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="email" className="text-sm">Correo Electrónico</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="correo@ejemplo.com"
+                className="text-sm"
                 {...register('email')}
               />
               {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
+                <p className="text-xs sm:text-sm text-red-500">{errors.email.message}</p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="password" className="text-sm">Contraseña</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
+                  className="text-sm"
                   {...register('password')}
                 />
                 <Button
@@ -93,12 +95,12 @@ export default function Login() {
                 </Button>
               </div>
               {errors.password && (
-                <p className="text-sm text-red-500">{errors.password.message}</p>
+                <p className="text-xs sm:text-sm text-red-500">{errors.password.message}</p>
               )}
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+          <CardFooter className="flex flex-col space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
+            <Button type="submit" className="w-full text-sm" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -111,7 +113,7 @@ export default function Login() {
                 </>
               )}
             </Button>
-            <p className="text-center text-sm text-gray-600">
+            <p className="text-center text-xs sm:text-sm text-gray-600">
               ¿No tienes cuenta?{' '}
               <Link to="/register" className="font-medium text-primary hover:underline">
                 Registrarse

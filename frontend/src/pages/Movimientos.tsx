@@ -106,7 +106,7 @@ export default function Movimientos() {
   } = useForm<MovimientoFormData>({
     resolver: zodResolver(movimientoSchema),
     defaultValues: {
-      tipoMovimiento: 'ENTRADA',
+      tipoMovimiento: 'COMPRA',
       cantidad: 1,
       precioUnitario: 0,
     },
@@ -117,7 +117,7 @@ export default function Movimientos() {
 
   useEffect(() => {
     if (selectedProductoId) {
-      const producto = productos.find((p) => p.id === selectedProductoId);
+      const producto = productos.find((p) => String(p.id) === selectedProductoId);
       if (producto) {
         if (selectedTipoMovimiento === 'COMPRA') {
           setValue('precioUnitario', Number(producto.precioCompra) || 0);
@@ -133,11 +133,16 @@ export default function Movimientos() {
   const fetchData = async () => {
     try {
       const [movimientosRes, productosRes, distribuidoresRes] = await Promise.all([
-        movimientosApi.getAll({ limit: 500 }),
+        movimientosApi.getAll({ limit: 500, orderBy: 'fecha', order: 'desc' }),
         productosApi.getAll({ activo: true, limit: 1000 }),
         distribuidoresApi.getAll(),
       ]);
-      setMovimientos(movimientosRes.data.data || []);
+      // Ordenar movimientos por fecha descendente (más recientes primero)
+      const movimientosData = movimientosRes.data.data || [];
+      const movimientosOrdenados = [...movimientosData].sort((a, b) => {
+        return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+      });
+      setMovimientos(movimientosOrdenados);
       setProductos(productosRes.data.data || []);
       setDistribuidores(distribuidoresRes.data.data || []);
     } catch (error) {
@@ -232,11 +237,10 @@ export default function Movimientos() {
         precioUnitario: data.precioUnitario,
         distribuidorId: data.distribuidorId ? parseInt(data.distribuidorId) : null,
         factura: data.factura || null,
-        notas: data.notas || null,
       });
       toast({
         title: 'Éxito',
-        description: 'Movimiento registrado correctamente',
+        description: `${data.tipoMovimiento === 'COMPRA' ? 'Compra' : data.tipoMovimiento === 'VENTA' ? 'Venta' : 'Ajuste'} registrada correctamente`,
       });
       setIsModalOpen(false);
       fetchData();
@@ -272,6 +276,11 @@ export default function Movimientos() {
       cell: ({ row }) => {
         const fecha = row.getValue('fecha') as string;
         return formatDate(fecha, true);
+      },
+      sortingFn: (rowA, rowB) => {
+        const dateA = new Date(rowA.original.fecha).getTime();
+        const dateB = new Date(rowB.original.fecha).getTime();
+        return dateA - dateB;
       },
     },
     {
@@ -362,6 +371,7 @@ export default function Movimientos() {
       pagination: {
         pageSize: 15,
       },
+      sorting: [{ id: 'fecha', desc: true }],
     },
   });
 
@@ -374,16 +384,16 @@ export default function Movimientos() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Movimientos</h1>
-          <p className="text-muted-foreground">
-            Registro de entradas, salidas y ajustes de inventario
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">Movimientos</h1>
+          <p className="text-sm text-muted-foreground">
+            Entradas, salidas y ajustes de inventario
           </p>
         </div>
-        <Button onClick={openCreateModal}>
+        <Button onClick={openCreateModal} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Nuevo Movimiento
         </Button>
@@ -391,21 +401,21 @@ export default function Movimientos() {
 
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+        <CardHeader className="p-3 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
             <Filter className="h-4 w-4" />
             Filtros
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-end gap-4">
-            <div className="w-48">
-              <Label className="text-sm">Tipo de Movimiento</Label>
+        <CardContent className="p-3 sm:p-6 pt-0">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-3 sm:gap-4">
+            <div className="col-span-2 sm:w-48">
+              <Label className="text-xs sm:text-sm">Tipo de Movimiento</Label>
               <Select
                 value={tipoFilter}
                 onValueChange={(value) => setTipoFilter(value as TipoMovimiento | 'all')}
               >
-                <SelectTrigger className="mt-1">
+                <SelectTrigger className="mt-1 text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -417,26 +427,26 @@ export default function Movimientos() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="w-40">
-              <Label className="text-sm">Desde</Label>
+            <div className="w-full sm:w-40">
+              <Label className="text-xs sm:text-sm">Desde</Label>
               <Input
                 type="date"
                 value={dateFilter.from}
                 onChange={(e) => setDateFilter((prev) => ({ ...prev, from: e.target.value }))}
-                className="mt-1"
+                className="mt-1 text-sm"
               />
             </div>
-            <div className="w-40">
-              <Label className="text-sm">Hasta</Label>
+            <div className="w-full sm:w-40">
+              <Label className="text-xs sm:text-sm">Hasta</Label>
               <Input
                 type="date"
                 value={dateFilter.to}
                 onChange={(e) => setDateFilter((prev) => ({ ...prev, to: e.target.value }))}
-                className="mt-1"
+                className="mt-1 text-sm"
               />
             </div>
             {hasActiveFilters && (
-              <Button variant="outline" size="sm" onClick={clearFilters}>
+              <Button variant="outline" size="sm" onClick={clearFilters} className="col-span-2 sm:col-span-1">
                 <X className="mr-1 h-3 w-3" />
                 Limpiar
               </Button>
@@ -447,31 +457,31 @@ export default function Movimientos() {
 
       {/* Table Card */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5" />
-              Historial de Movimientos
+        <CardHeader className="p-3 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+              <ArrowLeftRight className="h-4 w-4 sm:h-5 sm:w-5" />
+              Historial
             </CardTitle>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar movimientos..."
+                placeholder="Buscar..."
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="pl-9"
+                className="pl-9 text-sm"
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+        <CardContent className="p-2 sm:p-6 pt-0">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead key={header.id} className="whitespace-nowrap text-xs sm:text-sm">
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -488,7 +498,7 @@ export default function Movimientos() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id}>
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell key={cell.id} className="text-xs sm:text-sm py-2 sm:py-4">
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext()
@@ -511,9 +521,9 @@ export default function Movimientos() {
             </Table>
           </div>
           {/* Pagination */}
-          <div className="flex items-center justify-between px-2 py-4">
-            <p className="text-sm text-muted-foreground">
-              Mostrando {table.getRowModel().rows.length} de {filteredMovimientos.length} movimientos
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-2 py-3 sm:py-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              {table.getRowModel().rows.length} de {filteredMovimientos.length}
             </p>
             <div className="flex items-center space-x-2">
               <Button
@@ -521,18 +531,19 @@ export default function Movimientos() {
                 size="sm"
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
+                className="h-8 w-8 p-0"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-sm">
-                Página {table.getState().pagination.pageIndex + 1} de{' '}
-                {table.getPageCount()}
+              <span className="text-xs sm:text-sm">
+                {table.getState().pagination.pageIndex + 1}/{table.getPageCount()}
               </span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
+                className="h-8 w-8 p-0"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -543,10 +554,10 @@ export default function Movimientos() {
 
       {/* Create Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nuevo Movimiento</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg sm:text-xl">Nuevo Movimiento</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
               Registra una compra, venta o ajuste de inventario
             </DialogDescription>
           </DialogHeader>
@@ -603,7 +614,7 @@ export default function Movimientos() {
                     <SelectContent className="max-h-[300px]">
                       {productosFiltrados.length > 0 ? (
                         productosFiltrados.map((producto) => (
-                          <SelectItem key={producto.id} value={producto.id}>
+                          <SelectItem key={producto.id} value={String(producto.id)}>
                             <div className="flex items-center justify-between gap-4 w-full">
                               <span className="flex-1">{producto.nombre}</span>
                               <Badge variant={
@@ -629,6 +640,34 @@ export default function Movimientos() {
                 )}
               </div>
 
+              {selectedProductoId && (
+                <div className="rounded-lg bg-muted/50 p-3 space-y-1">
+                  {(() => {
+                    const producto = productos.find(p => String(p.id) === selectedProductoId);
+                    if (!producto) return null;
+                    const stock = producto.stockActual || producto.inventarioActual?.cantidadActual || 0;
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Stock actual:</span>
+                          <Badge variant={stock === 0 ? 'destructive' : stock <= (producto.stockMinimo || 5) ? 'secondary' : 'default'}>
+                            {stock} unidades
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Precio compra:</span>
+                          <span className="font-medium">{formatCurrency(Number(producto.precioCompra) || 0)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Precio venta:</span>
+                          <span className="font-medium">{formatCurrency(Number(producto.precioVenta) || 0)}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="cantidad">Cantidad *</Label>
@@ -642,9 +681,11 @@ export default function Movimientos() {
                     <p className="text-sm text-red-500">{errors.cantidad.message}</p>
                   )}
                 </div>
-                {selectedTipoMovimiento === 'COMPRA' && (
+                {(selectedTipoMovimiento === 'COMPRA' || selectedTipoMovimiento === 'VENTA') && (
                   <div className="space-y-2">
-                    <Label htmlFor="precioUnitario">Precio Unitario *</Label>
+                    <Label htmlFor="precioUnitario">
+                      Precio {selectedTipoMovimiento === 'COMPRA' ? 'de Compra' : 'de Venta'} *
+                    </Label>
                     <Input
                       id="precioUnitario"
                       type="number"

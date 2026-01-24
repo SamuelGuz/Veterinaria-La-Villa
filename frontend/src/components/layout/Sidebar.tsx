@@ -1,4 +1,5 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useUIStore } from '@/store';
 import { Button } from '@/components/ui/button';
@@ -10,13 +11,12 @@ import {
   Truck,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  Settings,
 } from 'lucide-react';
+import LogoImg from '../../../utils/Logo.png';
 
 const menuItems = [
   {
-    title: 'Dashboard',
+    title: 'Panel Principal',
     icon: LayoutDashboard,
     href: '/dashboard',
   },
@@ -36,7 +36,7 @@ const menuItems = [
     href: '/categorias',
   },
   {
-    title: 'Distribuidores',
+    title: 'Proveedores',
     icon: Truck,
     href: '/distribuidores',
   },
@@ -44,38 +44,44 @@ const menuItems = [
 
 export function Sidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { sidebarOpen, toggleSidebar } = useUIStore();
-  const { logout, user } = useAuthStore();
+  const { sidebarOpen, toggleSidebar, mobileMenuOpen, setMobileMenuOpen } = useUIStore();
+  const { user } = useAuthStore();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, setMobileMenuOpen]);
 
   return (
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen border-r bg-white transition-all duration-300',
-        sidebarOpen ? 'w-64' : 'w-16'
+        // Desktop behavior
+        'hidden lg:block',
+        sidebarOpen ? 'lg:w-64' : 'lg:w-16',
+        // Mobile behavior - full width slide in
+        mobileMenuOpen && 'block w-72 shadow-2xl'
       )}
     >
       <div className="flex h-full flex-col">
         {/* Header */}
-        <div className="flex h-16 items-center justify-between border-b px-4">
-          {sidebarOpen && (
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <span className="text-lg font-bold text-white">V</span>
-              </div>
-              <span className="font-semibold text-gray-800">Veterinaria</span>
-            </div>
-          )}
+        <div className="flex h-36 items-center justify-center border-b px-4 relative">
+          <div className={cn(
+            "flex items-center justify-center overflow-hidden transition-all duration-300 p-0 m-0",
+            sidebarOpen ? "h-36 w-36" : "h-32 w-32"
+          )}>
+            <img 
+              src={LogoImg} 
+              alt="Veterinaria La Villa" 
+              className="h-full w-full object-cover hover:scale-110 transition-transform duration-300 p-0 m-0"
+              style={{ objectPosition: 'center' }}
+            />
+          </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
-            className={cn(sidebarOpen ? '' : 'mx-auto')}
+            className="absolute right-2 top-2"
           >
             {sidebarOpen ? (
               <ChevronLeft className="h-4 w-4" />
@@ -87,21 +93,28 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1 p-2">
-          {menuItems.map((item) => {
+          {menuItems.map((item, index) => {
             const isActive = location.pathname === item.href;
             return (
               <Link
                 key={item.href}
                 to={item.href}
+                style={{ animationDelay: `${index * 50}ms` }}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium',
+                  'transition-all duration-200 ease-out',
+                  'hover:translate-x-1 hover:shadow-md active:scale-95',
+                  'animate-slideInLeft',
                   isActive
-                    ? 'bg-primary text-white'
+                    ? 'bg-primary text-white shadow-lg shadow-primary/30'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  !sidebarOpen && 'justify-center px-2'
+                  !sidebarOpen && 'justify-center px-2 hover:translate-x-0'
                 )}
               >
-                <item.icon className="h-5 w-5 shrink-0" />
+                <item.icon className={cn(
+                  "h-5 w-5 shrink-0 transition-transform duration-200",
+                  "group-hover:scale-110"
+                )} />
                 {sidebarOpen && <span>{item.title}</span>}
               </Link>
             );
@@ -109,37 +122,13 @@ export function Sidebar() {
         </nav>
 
         {/* User Section */}
-        <div className="border-t p-2">
-          {sidebarOpen ? (
-            <div className="mb-2 px-3 py-2">
-              <p className="text-sm font-medium text-gray-800">{user?.nombre}</p>
+        <div className="border-t p-3">
+          {sidebarOpen && (
+            <div className="space-y-0.5">
+              <p className="text-sm font-semibold text-gray-800">{user?.nombre}</p>
               <p className="text-xs text-gray-500">{user?.email}</p>
             </div>
-          ) : null}
-          <Button
-            variant="ghost"
-            size={sidebarOpen ? 'default' : 'icon'}
-            className={cn(
-              'w-full text-gray-600 hover:text-gray-900',
-              !sidebarOpen && 'justify-center'
-            )}
-            onClick={() => navigate('/configuracion')}
-          >
-            <Settings className="h-5 w-5" />
-            {sidebarOpen && <span className="ml-2">Configuración</span>}
-          </Button>
-          <Button
-            variant="ghost"
-            size={sidebarOpen ? 'default' : 'icon'}
-            className={cn(
-              'w-full text-red-600 hover:bg-red-50 hover:text-red-700',
-              !sidebarOpen && 'justify-center'
-            )}
-            onClick={handleLogout}
-          >
-            <LogOut className="h-5 w-5" />
-            {sidebarOpen && <span className="ml-2">Cerrar Sesión</span>}
-          </Button>
+          )}
         </div>
       </div>
     </aside>

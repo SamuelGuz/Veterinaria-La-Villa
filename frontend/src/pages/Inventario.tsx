@@ -214,13 +214,13 @@ export default function Inventario() {
         const stockMaximo = row.original.stockMaximo;
 
         if (cantidad === 0) {
-          return <Badge variant="destructive">Sin Stock</Badge>;
+          return <Badge variant="destructive">Sin Inventario</Badge>;
         }
         if (cantidad <= stockMinimo) {
-          return <Badge className="bg-orange-500">Stock Bajo</Badge>;
+          return <Badge className="bg-orange-500">Inventario Bajo</Badge>;
         }
         if (cantidad >= stockMaximo) {
-          return <Badge className="bg-blue-500">Stock Alto</Badge>;
+          return <Badge className="bg-blue-500">Inventario Alto</Badge>;
         }
         return <Badge variant="default">Normal</Badge>;
       },
@@ -269,27 +269,27 @@ export default function Inventario() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Inventario</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">Inventario</h1>
+        <p className="text-sm text-muted-foreground">
           Control y visualización del stock actual
         </p>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <Card 
           className={`cursor-pointer transition-all ${stockFilter === 'all' ? 'ring-2 ring-primary' : ''}`}
           onClick={() => setStockFilter('all')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Productos</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Productos</CardTitle>
+            <Package className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
 
@@ -297,12 +297,12 @@ export default function Inventario() {
           className={`cursor-pointer transition-all ${stockFilter === 'low' ? 'ring-2 ring-orange-500' : ''}`}
           onClick={() => setStockFilter('low')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Bajo</CardTitle>
-            <TrendingDown className="h-4 w-4 text-orange-500" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Inventario Bajo</CardTitle>
+            <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-orange-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{stats.stockBajo}</div>
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-orange-600">{stats.stockBajo}</div>
           </CardContent>
         </Card>
 
@@ -310,12 +310,12 @@ export default function Inventario() {
           className={`cursor-pointer transition-all ${stockFilter === 'ok' ? 'ring-2 ring-green-500' : ''}`}
           onClick={() => setStockFilter('ok')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Normal</CardTitle>
-            <Package className="h-4 w-4 text-green-500" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Inventario Normal</CardTitle>
+            <Package className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.stockOk}</div>
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-green-600">{stats.stockOk}</div>
           </CardContent>
         </Card>
 
@@ -323,40 +323,40 @@ export default function Inventario() {
           className={`cursor-pointer transition-all ${stockFilter === 'high' ? 'ring-2 ring-blue-500' : ''}`}
           onClick={() => setStockFilter('high')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Alto</CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-500" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Inventario Alto</CardTitle>
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.stockAlto}</div>
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-blue-600">{stats.stockAlto}</div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
-            <Warehouse className="h-4 w-4 text-muted-foreground" />
+        <Card className="col-span-2 sm:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Valor Total</CardTitle>
+            <Warehouse className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.valorTotal)}</div>
+          <CardContent className="p-3 sm:p-6 pt-1 sm:pt-0">
+            <div className="text-lg sm:text-2xl font-bold">{formatCurrency(stats.valorTotal)}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Table Card */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+        <CardHeader className="p-3 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Warehouse className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                <Warehouse className="h-4 w-4 sm:h-5 sm:w-5" />
                 Estado del Inventario
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm">
                 {stockFilter !== 'all' && (
                   <Button
                     variant="link"
-                    className="h-auto p-0 text-primary"
+                    className="h-auto p-0 text-primary text-xs sm:text-sm"
                     onClick={() => setStockFilter('all')}
                   >
                     <Filter className="mr-1 h-3 w-3" />
@@ -365,25 +365,25 @@ export default function Inventario() {
                 )}
               </CardDescription>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar en inventario..."
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="pl-9"
+                className="pl-9 text-sm"
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+        <CardContent className="p-2 sm:p-6 pt-0">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead key={header.id} className="whitespace-nowrap text-xs sm:text-sm">
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -400,7 +400,7 @@ export default function Inventario() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id}>
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell key={cell.id} className="text-xs sm:text-sm py-2 sm:py-4">
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext()
@@ -423,9 +423,9 @@ export default function Inventario() {
             </Table>
           </div>
           {/* Pagination */}
-          <div className="flex items-center justify-between px-2 py-4">
-            <p className="text-sm text-muted-foreground">
-              Mostrando {table.getRowModel().rows.length} de {filteredProductos.length} productos
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              {table.getRowModel().rows.length}/{filteredProductos.length} productos
             </p>
             <div className="flex items-center space-x-2">
               <Button
@@ -433,19 +433,22 @@ export default function Inventario() {
                 size="sm"
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
+                className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3"
               >
                 <ChevronLeft className="h-4 w-4" />
+                <span className="hidden sm:inline ml-1">Anterior</span>
               </Button>
-              <span className="text-sm">
-                Página {table.getState().pagination.pageIndex + 1} de{' '}
-                {table.getPageCount()}
+              <span className="text-xs sm:text-sm">
+                {table.getState().pagination.pageIndex + 1}/{table.getPageCount()}
               </span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
+                className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3"
               >
+                <span className="hidden sm:inline mr-1">Siguiente</span>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

@@ -243,7 +243,6 @@ export const movimientosApi = {
     precioUnitario: number;
     distribuidorId?: number | null;
     factura?: string | null;
-    notas?: string | null;
   }) => api.post<ApiResponse<Movimiento>>('/movimientos', data),
   
   getByProducto: (productoId: number, limit?: number) =>

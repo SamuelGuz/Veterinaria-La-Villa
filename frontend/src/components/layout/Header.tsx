@@ -9,12 +9,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Bell, Menu, User, LogOut, Settings } from 'lucide-react';
+import { Menu, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function Header() {
   const { user, logout } = useAuthStore();
-  const { toggleSidebar } = useUIStore();
+  const { toggleMobileMenu } = useUIStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -32,29 +32,22 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-white px-4 shadow-sm">
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-30 flex h-14 sm:h-16 items-center justify-between border-b bg-white px-3 sm:px-4 shadow-sm">
+      <div className="flex items-center gap-2 sm:gap-4">
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden"
-          onClick={toggleSidebar}
+          className="lg:hidden shrink-0"
+          onClick={toggleMobileMenu}
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 className="text-lg font-semibold text-gray-800">
+        <h1 className="text-base sm:text-lg font-semibold text-gray-800 truncate">
           Sistema de Inventario
         </h1>
       </div>
 
-      <div className="flex items-center gap-4">
-        {/* Notificaciones */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />
-        </Button>
-
-        {/* Menu de Usuario */}
+      <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -74,15 +67,6 @@ export function Header() {
                 </p>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/perfil')}>
-              <User className="mr-2 h-4 w-4" />
-              <span>Perfil</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/configuracion')}>
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Configuración</span>
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-600 focus:text-red-600"

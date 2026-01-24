@@ -13,9 +13,9 @@ import {
   SortingState,
   ColumnFiltersState,
 } from '@tanstack/react-table';
-import { productosApi, categoriasApi, distribuidoresApi } from '@/lib/api';
-import { Producto, Categoria, Distribuidor } from '@/lib/api';
-import { formatCurrency, formatDate, cn } from '@/lib/utils';
+import { productosApi, categoriasApi } from '@/lib/api';
+import { Producto, Categoria } from '@/lib/api';
+import { formatCurrency, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -85,7 +85,6 @@ type ProductoFormData = z.infer<typeof productoSchema>;
 export default function Productos() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [distribuidores, setDistribuidores] = useState<Distribuidor[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -108,7 +107,6 @@ export default function Productos() {
     defaultValues: {
       activo: true,
       stockMinimo: 10,
-      stockMaximo: 100,
       precioCompra: 0,
       precioVenta: 0,
     },
@@ -116,14 +114,12 @@ export default function Productos() {
 
   const fetchData = async () => {
     try {
-      const [productosRes, categoriasRes, distribuidoresRes] = await Promise.all([
+      const [productosRes, categoriasRes] = await Promise.all([
         productosApi.getAll({ limit: 1000 }),
         categoriasApi.getAll(),
-        distribuidoresApi.getAll(),
       ]);
       setProductos(productosRes.data.data || []);
       setCategorias(categoriasRes.data.data || []);
-      setDistribuidores(distribuidoresRes.data.data || []);
     } catch (error) {
       toast({
         title: 'Error',
@@ -180,7 +176,7 @@ export default function Productos() {
       const payload = {
         nombre: data.nombre,
         descripcion: data.descripcion || null,
-        categoriaId: parseInt(data.categoriaId),
+        categoriaId: String(parseInt(data.categoriaId)),
         stockMinimo: data.stockMinimo,
         unidadMedida: data.unidadMedida || 'unidades',
         precioCompra: data.precioCompra,
@@ -189,7 +185,7 @@ export default function Productos() {
       };
       
       if (editingProducto) {
-        await productosApi.update(editingProducto.id, payload);
+        await productosApi.update(parseInt(editingProducto.id as any), payload);
         toast({
           title: 'Éxito',
           description: 'Producto actualizado correctamente',
@@ -215,7 +211,7 @@ export default function Productos() {
   const handleDelete = async () => {
     if (!deletingProducto) return;
     try {
-      await productosApi.delete(deletingProducto.id);
+      await productosApi.delete(parseInt(deletingProducto.id as any));
       toast({
         title: 'Éxito',
         description: 'Producto eliminado correctamente',
@@ -277,7 +273,7 @@ export default function Productos() {
     },
     {
       accessorKey: 'stockActual',
-      header: 'Stock',
+      header: 'Inventario',
       cell: ({ row }) => {
         const cantidad = row.original.stockActual ?? row.original.inventarioActual?.cantidadActual ?? 0;
         const stockMinimo = row.original.stockMinimo;
@@ -378,97 +374,97 @@ export default function Productos() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Productos</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">Productos</h1>
+          <p className="text-sm text-muted-foreground">
             Gestiona el catálogo de productos
           </p>
         </div>
-        <Button onClick={openCreateModal}>
+        <Button onClick={openCreateModal} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Nuevo Producto
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Productos</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total</CardTitle>
+            <Package className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
+          <CardContent className="p-3 sm:p-6 pt-0">
+            <div className="text-lg sm:text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Bajo</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-500" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Inventario Bajo</CardTitle>
+            <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.stockBajo}</div>
+          <CardContent className="p-3 sm:p-6 pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-red-600">{stats.stockBajo}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Normal</CardTitle>
-            <TrendingUp className="h-4 w-4 text-yellow-500" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Normal</CardTitle>
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{stats.stockNormal}</div>
+          <CardContent className="p-3 sm:p-6 pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-yellow-600">{stats.stockNormal}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Alto</CardTitle>
-            <TrendingDown className="h-4 w-4 text-green-500" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Inventario Alto</CardTitle>
+            <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.stockAlto}</div>
+          <CardContent className="p-3 sm:p-6 pt-0">
+            <div className="text-lg sm:text-2xl font-bold text-green-600">{stats.stockAlto}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Total</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+        <Card className="col-span-2 sm:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2 p-3 sm:p-6 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Valor Total</CardTitle>
+            <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.valorTotal)}</div>
+          <CardContent className="p-3 sm:p-6 pt-0">
+            <div className="text-lg sm:text-2xl font-bold">{formatCurrency(stats.valorTotal)}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Table Card */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
+        <CardHeader className="p-3 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+              <Package className="h-4 w-4 sm:h-5 sm:w-5" />
               Lista de Productos
             </CardTitle>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar productos..."
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="pl-9"
+                className="pl-9 text-sm"
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
+        <CardContent className="p-2 sm:p-6 pt-0">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
+                      <TableHead key={header.id} className="whitespace-nowrap text-xs sm:text-sm">
                         {header.isPlaceholder
                           ? null
                           : flexRender(
@@ -485,7 +481,7 @@ export default function Productos() {
                   table.getRowModel().rows.map((row) => (
                     <TableRow key={row.id}>
                       {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
+                        <TableCell key={cell.id} className="text-xs sm:text-sm py-2 sm:py-4">
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext()
@@ -508,9 +504,9 @@ export default function Productos() {
             </Table>
           </div>
           {/* Pagination */}
-          <div className="flex items-center justify-between px-2 py-4">
-            <p className="text-sm text-muted-foreground">
-              Mostrando {table.getRowModel().rows.length} de {productos.length} productos
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-2 py-3 sm:py-4">
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              {table.getRowModel().rows.length} de {productos.length}
             </p>
             <div className="flex items-center space-x-2">
               <Button
@@ -518,18 +514,19 @@ export default function Productos() {
                 size="sm"
                 onClick={() => table.previousPage()}
                 disabled={!table.getCanPreviousPage()}
+                className="h-8 w-8 p-0"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-sm">
-                Página {table.getState().pagination.pageIndex + 1} de{' '}
-                {table.getPageCount()}
+              <span className="text-xs sm:text-sm">
+                {table.getState().pagination.pageIndex + 1}/{table.getPageCount()}
               </span>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => table.nextPage()}
                 disabled={!table.getCanNextPage()}
+                className="h-8 w-8 p-0"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -540,12 +537,12 @@ export default function Productos() {
 
       {/* Create/Edit Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">
               {editingProducto ? 'Editar Producto' : 'Nuevo Producto'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm">
               {editingProducto
                 ? 'Modifica los datos del producto'
                 : 'Completa el formulario para crear un nuevo producto'}
