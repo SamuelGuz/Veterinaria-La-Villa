@@ -5,6 +5,7 @@ import catalogoRoutes from './catalogo.routes';
 import movimientoRoutes from './movimiento.routes';
 import estadisticasRoutes from './estadisticas.routes';
 import distribuidorRoutes from './distribuidor.routes';
+import whatsappActivationRoutes from './whatsapp-activation.routes';
 
 const router = Router();
 
@@ -15,6 +16,7 @@ router.use('/catalogo', catalogoRoutes);
 router.use('/movimientos', movimientoRoutes);
 router.use('/estadisticas', estadisticasRoutes);
 router.use('/distribuidores', distribuidorRoutes);
+router.use('/whatsapp/activation', whatsappActivationRoutes);
 
 // Ruta de health check
 router.get('/health', (req, res) => {

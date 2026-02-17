@@ -6,3 +6,4 @@ export { default as Inventario } from './Inventario';
 export { default as Movimientos } from './Movimientos';
 export { default as Categorias } from './Categorias';
 export { default as Distribuidores } from './Distribuidores';
+export { default as NumerosAutorizados } from './NumerosAutorizados';

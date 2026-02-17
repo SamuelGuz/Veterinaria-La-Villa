@@ -8,7 +8,6 @@ const router = Router();
 
 // Rutas públicas
 router.post('/login', validateBody(loginSchema), authController.login);
-router.post('/register', validateBody(registerSchema), authController.register);
 router.get('/verify', authController.verifyToken);
 
 // Rutas protegidas

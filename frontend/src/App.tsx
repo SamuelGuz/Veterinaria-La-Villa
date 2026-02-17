@@ -6,13 +6,13 @@ import { Toaster } from '@/components/ui/toast';
 import { useAuthStore } from '@/store';
 import {
   Login,
-  Register,
   Dashboard,
   Productos,
   Inventario,
   Movimientos,
   Categorias,
   Distribuidores,
+  NumerosAutorizados,
 } from '@/pages';
 
 function App() {
@@ -40,12 +40,6 @@ function App() {
             isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
           }
         />
-        <Route
-          path="/register"
-          element={
-            isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />
-          }
-        />
 
         {/* Protected Routes */}
         <Route
@@ -61,6 +55,7 @@ function App() {
           <Route path="/movimientos" element={<Movimientos />} />
           <Route path="/categorias" element={<Categorias />} />
           <Route path="/distribuidores" element={<Distribuidores />} />
+          <Route path="/whatsapp-numeros" element={<NumerosAutorizados />} />
         </Route>
 
         {/* Redirect root to dashboard or login */}

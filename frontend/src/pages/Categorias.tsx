@@ -80,8 +80,6 @@ export default function Categorias() {
     register,
     handleSubmit,
     reset,
-    setValue,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<CategoriaFormData>({
     resolver: zodResolver(categoriaSchema),

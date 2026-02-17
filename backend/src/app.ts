@@ -10,6 +10,11 @@ import { connectDatabase } from './config/database';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import routes from './routes';
 
+// WhatsApp Bot
+import whatsappRoutes from './routes/whatsapp.routes';
+import numeroAutorizadoRoutes from './routes/numeroAutorizado.routes';
+import { initCleanupJobs } from './jobs/cleanup';
+
 // Crear aplicación Express
 const app: Application = express();
 
@@ -48,6 +53,10 @@ app.get('/', (req: Request, res: Response) => {
 // Montar rutas de la API
 app.use('/api', routes);
 
+// Montar rutas de WhatsApp Bot
+app.use('/webhook/whatsapp', whatsappRoutes);
+app.use('/api/numeros-autorizados', numeroAutorizadoRoutes);
+
 // Manejo de rutas no encontradas
 app.use(notFoundHandler);
 
@@ -60,6 +69,9 @@ const startServer = async (): Promise<void> => {
     // Conectar a la base de datos
     await connectDatabase();
 
+    // Inicializar cron jobs de limpieza (WhatsApp Bot)
+    initCleanupJobs();
+
     // Iniciar servidor HTTP
     app.listen(config.port, () => {
       console.log(`
@@ -70,6 +82,7 @@ const startServer = async (): Promise<void> => {
 ║   ✅ Servidor corriendo en: http://localhost:${config.port}         ║
 ║   📊 Ambiente: ${config.nodeEnv.padEnd(20)}                    ║
 ║   🔗 Health check: http://localhost:${config.port}/api/health      ║
+║   📱 WhatsApp webhook: http://localhost:${config.port}/webhook/whatsapp ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
       `);

@@ -14,7 +14,6 @@ import {
 } from '@tanstack/react-table';
 import { distribuidoresApi } from '@/lib/api';
 import { Distribuidor } from '@/lib/api';
-import { formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -136,7 +135,7 @@ export default function Distribuidores() {
       telefono: distribuidor.telefono || '',
       email: distribuidor.email || '',
       direccion: distribuidor.direccion || '',
-      notas: distribuidor.notas || '',
+      notas: '',
       activo: distribuidor.activo,
     });
     setIsModalOpen(true);

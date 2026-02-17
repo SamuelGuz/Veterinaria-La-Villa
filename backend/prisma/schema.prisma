@@ -2,7 +2,8 @@
 // Este archivo es el esquema de la base de datos
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -130,4 +131,65 @@ model InventarioActual {
   producto Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
 
   @@map("inventario_actual")
+}
+
+// ============================================
+// MODELO: Número Autorizado (WhatsApp Bot)
+// ============================================
+model NumeroAutorizado {
+  id          Int      @id @default(autoincrement())
+  telefono    String   @unique @db.VarChar(20) // Formato: 521234567890
+  nombre      String   @db.VarChar(100)
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  mensajes       MensajeProcesado[]
+  confirmaciones ConfirmacionPendiente[]
+
+  @@map("numeros_autorizados")
+}
+
+// ============================================
+// MODELO: Mensaje Procesado (Idempotencia)
+// ============================================
+model MensajeProcesado {
+  id           Int      @id @default(autoincrement())
+  messageId    String   @unique @map("message_id") @db.VarChar(100) // ID único del mensaje de WhatsApp
+  telefono     String   @db.VarChar(20)
+  hashMensaje  String   @map("hash_mensaje") @db.VarChar(64) // SHA-256 del contenido
+  resultado    String   @db.Text // Respuesta enviada
+  procesadoAt  DateTime @default(now()) @map("procesado_at")
+
+  // Relaciones
+  numeroAutorizado NumeroAutorizado? @relation(fields: [telefono], references: [telefono])
+
+  @@index([telefono], name: "idx_mensajes_telefono")
+  @@index([procesadoAt], name: "idx_mensajes_fecha")
+  @@map("mensajes_procesados")
+}
+
+// ============================================
+// MODELO: Confirmación Pendiente (WhatsApp Bot)
+// ============================================
+model ConfirmacionPendiente {
+  id             Int      @id @default(autoincrement())
+  token          String   @unique @db.VarChar(10) // Código corto: SI1234
+  telefono       String   @db.VarChar(20)
+  tipoOperacion  String   @map("tipo_operacion") @db.VarChar(20) // COMPRA, VENTA, AJUSTE
+  productoId     Int      @map("producto_id")
+  cantidad       Int
+  precioUnitario Decimal  @map("precio_unitario") @db.Decimal(12, 2)
+  distribuidorId Int?     @map("distribuidor_id")
+  notas          String?  @db.Text
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relaciones
+  numeroAutorizado NumeroAutorizado @relation(fields: [telefono], references: [telefono])
+
+  @@index([telefono], name: "idx_confirmaciones_telefono")
+  @@index([expiresAt], name: "idx_confirmaciones_expiracion")
+  @@map("confirmaciones_pendientes")
 }

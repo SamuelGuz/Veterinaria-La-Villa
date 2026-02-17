@@ -13,14 +13,14 @@ import {
   ColumnDef,
   SortingState,
 } from '@tanstack/react-table';
-import { movimientosApi, productosApi, distribuidoresApi } from '@/lib/api';
+import { movimientosApi, productosApi, distribuidoresApi, categoriasApi } from '@/lib/api';
 import { MovimientoInventario, Producto, Distribuidor } from '@/lib/api';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -63,12 +63,17 @@ import { useToast } from '@/components/ui/use-toast';
 type TipoMovimiento = 'COMPRA' | 'VENTA' | 'AJUSTE';
 
 const movimientoSchema = z.object({
-  productoId: z.string().min(1, 'El producto es requerido'),
+  productoId: z.string().optional(),
+  nuevoProducto: z.string().optional(),
+  categoriaId: z.string().optional(),
+  precioVenta: z.number().min(0, 'El precio de venta debe ser mayor o igual a 0').optional(),
   tipoMovimiento: z.enum(['COMPRA', 'VENTA', 'AJUSTE']),
   cantidad: z.number().int().min(1, 'La cantidad debe ser mayor a 0'),
   precioUnitario: z.number().min(0, 'El precio debe ser mayor o igual a 0'),
   distribuidorId: z.string().optional(),
-  factura: z.string().optional(),
+}).refine((data) => data.productoId || data.nuevoProducto, {
+  message: 'Debes seleccionar un producto o ingresar uno nuevo',
+  path: ['productoId'],
 });
 
 type MovimientoFormData = z.infer<typeof movimientoSchema>;
@@ -87,8 +92,10 @@ export default function Movimientos() {
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [distribuidores, setDistribuidores] = useState<Distribuidor[]>([]);
+  const [categorias, setCategorias] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modoCrearProducto, setModoCrearProducto] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'fecha', desc: true }]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [productoSearch, setProductoSearch] = useState('');
@@ -132,10 +139,11 @@ export default function Movimientos() {
 
   const fetchData = async () => {
     try {
-      const [movimientosRes, productosRes, distribuidoresRes] = await Promise.all([
+      const [movimientosRes, productosRes, distribuidoresRes, categoriasRes] = await Promise.all([
         movimientosApi.getAll({ limit: 500, orderBy: 'fecha', order: 'desc' }),
         productosApi.getAll({ activo: true, limit: 1000 }),
         distribuidoresApi.getAll(),
+        categoriasApi.getAll(),
       ]);
       // Ordenar movimientos por fecha descendente (más recientes primero)
       const movimientosData = movimientosRes.data.data || [];
@@ -145,6 +153,7 @@ export default function Movimientos() {
       setMovimientos(movimientosOrdenados);
       setProductos(productosRes.data.data || []);
       setDistribuidores(distribuidoresRes.data.data || []);
+      setCategorias(categoriasRes.data.data || []);
     } catch (error) {
       toast({
         title: 'Error',
@@ -173,7 +182,6 @@ export default function Movimientos() {
           cantidad: 1,
           precioUnitario: 0,
           distribuidorId: '',
-          factura: '',
         });
         setProductoSearch('');
         setIsModalOpen(true);
@@ -218,26 +226,72 @@ export default function Movimientos() {
   const openCreateModal = () => {
     reset({
       productoId: '',
+      nuevoProducto: '',
+      categoriaId: '',
+      precioVenta: 0,
       tipoMovimiento: 'COMPRA',
       cantidad: 1,
       precioUnitario: 0,
       distribuidorId: '',
-      factura: '',
     });
     setProductoSearch('');
+    setModoCrearProducto(false);
     setIsModalOpen(true);
   };
 
   const onSubmit = async (data: MovimientoFormData) => {
     try {
+      let productoId = data.productoId ? parseInt(data.productoId) : null;
+
+      // Si no hay productoId pero hay nuevoProducto, crear el producto primero
+      if (!productoId && data.nuevoProducto) {
+        const categoriaId = data.categoriaId ? parseInt(data.categoriaId) : categorias[0]?.id;
+        
+        if (!categoriaId) {
+          toast({
+            title: 'Error',
+            description: 'Debes seleccionar una categoría para el nuevo producto',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        const nuevoProductoData = {
+          nombre: data.nuevoProducto.trim(),
+          categoriaId: categoriaId,
+          stockMinimo: 5,
+          precioCompra: data.tipoMovimiento === 'COMPRA' ? data.precioUnitario : 0,
+          precioVenta: data.precioVenta || 0,
+          activo: true,
+        };
+
+        const productoRes = await productosApi.create(nuevoProductoData);
+        productoId = productoRes.data.data?.id ? parseInt(productoRes.data.data.id) : null;
+
+        toast({
+          title: 'Producto creado',
+          description: `El producto "${data.nuevoProducto}" fue creado exitosamente`,
+        });
+      }
+
+      if (!productoId) {
+        toast({
+          title: 'Error',
+          description: 'Debes seleccionar o crear un producto',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       await movimientosApi.create({
-        productoId: parseInt(data.productoId),
+        productoId: productoId,
         tipoMovimiento: data.tipoMovimiento as 'COMPRA' | 'VENTA' | 'AJUSTE',
         cantidad: data.cantidad,
         precioUnitario: data.precioUnitario,
         distribuidorId: data.distribuidorId ? parseInt(data.distribuidorId) : null,
-        factura: data.factura || null,
+        factura: null,
       });
+      
       toast({
         title: 'Éxito',
         description: `${data.tipoMovimiento === 'COMPRA' ? 'Compra' : data.tipoMovimiento === 'VENTA' ? 'Venta' : 'Ajuste'} registrada correctamente`,
@@ -596,45 +650,94 @@ export default function Movimientos() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="productoId">Producto *</Label>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Buscar producto..."
-                    value={productoSearch}
-                    onChange={(e) => setProductoSearch(e.target.value)}
-                    className="mb-2"
-                  />
-                  <Select
-                    value={watch('productoId')}
-                    onValueChange={(value) => setValue('productoId', value)}
+                <div className="flex items-center justify-between">
+                  <Label>Producto *</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setModoCrearProducto(!modoCrearProducto);
+                      setValue('productoId', '');
+                      setValue('nuevoProducto', '');
+                    }}
+                    className="h-7 text-xs"
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar producto" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[300px]">
-                      {productosFiltrados.length > 0 ? (
-                        productosFiltrados.map((producto) => (
-                          <SelectItem key={producto.id} value={String(producto.id)}>
-                            <div className="flex items-center justify-between gap-4 w-full">
-                              <span className="flex-1">{producto.nombre}</span>
-                              <Badge variant={
-                                (producto.stockActual || producto.inventarioActual?.cantidadActual || 0) === 0 
-                                  ? 'destructive' 
-                                  : 'secondary'
-                              } className="text-xs">
-                                Stock: {producto.stockActual || producto.inventarioActual?.cantidadActual || 0}
-                              </Badge>
-                            </div>
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <div className="p-2 text-sm text-muted-foreground text-center">
-                          No se encontraron productos
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
+                    {modoCrearProducto ? 'Seleccionar existente' : '+ Crear nuevo'}
+                  </Button>
                 </div>
+
+                {!modoCrearProducto ? (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Buscar producto..."
+                      value={productoSearch}
+                      onChange={(e) => setProductoSearch(e.target.value)}
+                      className="mb-2"
+                    />
+                    <Select
+                      value={watch('productoId')}
+                      onValueChange={(value) => setValue('productoId', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar producto" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {productosFiltrados.length > 0 ? (
+                          productosFiltrados.map((producto) => (
+                            <SelectItem key={producto.id} value={String(producto.id)}>
+                              <div className="flex items-center justify-between gap-4 w-full">
+                                <span className="flex-1">{producto.nombre}</span>
+                                <Badge variant={
+                                  (producto.stockActual || producto.inventarioActual?.cantidadActual || 0) === 0 
+                                    ? 'destructive' 
+                                    : 'secondary'
+                                } className="text-xs">
+                                  Stock: {producto.stockActual || producto.inventarioActual?.cantidadActual || 0}
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            No se encontraron productos
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Nombre del nuevo producto"
+                      {...register('nuevoProducto')}
+                      className="mb-2"
+                    />
+                    <Select
+                      value={watch('categoriaId')}
+                      onValueChange={(value) => setValue('categoriaId', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar categoría" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((categoria) => (
+                          <SelectItem key={categoria.id} value={String(categoria.id)}>
+                            {categoria.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Precio de venta"
+                      {...register('precioVenta', { valueAsNumber: true })}
+                    />
+                  </div>
+                )}
+                
                 {errors.productoId && (
                   <p className="text-sm text-red-500">{errors.productoId.message}</p>
                 )}
@@ -701,35 +804,24 @@ export default function Movimientos() {
               </div>
 
               {selectedTipoMovimiento === 'COMPRA' && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="distribuidorId">Distribuidor</Label>
-                    <Select
-                      value={watch('distribuidorId') || ''}
-                      onValueChange={(value) => setValue('distribuidorId', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar distribuidor (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {distribuidores.map((dist) => (
-                          <SelectItem key={dist.id} value={String(dist.id)}>
-                            {dist.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="factura">Número de Factura</Label>
-                    <Input
-                      id="factura"
-                      placeholder="Ej: F-12345"
-                      {...register('factura')}
-                    />
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label htmlFor="distribuidorId">Distribuidor</Label>
+                  <Select
+                    value={watch('distribuidorId') || ''}
+                    onValueChange={(value) => setValue('distribuidorId', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar distribuidor (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {distribuidores.map((dist) => (
+                        <SelectItem key={dist.id} value={String(dist.id)}>
+                          {dist.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
             </div>
             <DialogFooter>

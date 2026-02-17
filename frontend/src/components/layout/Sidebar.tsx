@@ -11,6 +11,7 @@ import {
   Truck,
   ChevronLeft,
   ChevronRight,
+  MessageCircle,
 } from 'lucide-react';
 import LogoImg from '../../../utils/Logo.png';
 
@@ -39,6 +40,11 @@ const menuItems = [
     title: 'Proveedores',
     icon: Truck,
     href: '/distribuidores',
+  },
+  {
+    title: 'WhatsApp Bot',
+    icon: MessageCircle,
+    href: '/whatsapp-numeros',
   },
 ];
 

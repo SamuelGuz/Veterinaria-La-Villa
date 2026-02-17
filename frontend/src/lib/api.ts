@@ -325,3 +325,31 @@ export interface ComparativaMensual {
   ventas: number;
   diferencia: number;
 }
+
+// ============================================
+// TIPOS WHATSAPP - NÚMEROS AUTORIZADOS
+// ============================================
+
+export interface NumeroAutorizado {
+  id: number;
+  telefono: string;
+  nombre: string;
+  activo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Números Autorizados WhatsApp
+export const numerosAutorizadosApi = {
+  getAll: () =>
+    api.get<ApiResponse<NumeroAutorizado[]>>('/numeros-autorizados'),
+
+  create: (data: { telefono: string; nombre: string }) =>
+    api.post<ApiResponse<NumeroAutorizado>>('/numeros-autorizados', data),
+
+  update: (id: number, data: { nombre?: string; activo?: boolean }) =>
+    api.put<ApiResponse<NumeroAutorizado>>(`/numeros-autorizados/${id}`, data),
+
+  delete: (id: number) =>
+    api.delete<ApiResponse<null>>(`/numeros-autorizados/${id}`),
+};
