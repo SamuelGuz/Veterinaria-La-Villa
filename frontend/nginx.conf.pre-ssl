@@ -1,4 +1,5 @@
-# HTTP — redirige a HTTPS (excepto challenge de Let's Encrypt)
+# Configuración temporal SOLO HTTP (para obtener certificado Let's Encrypt)
+# Después de obtener el certificado, se usa nginx.conf con HTTPS
 server {
     listen 80;
     server_name veterinariavilla.lat www.veterinariavilla.lat;
@@ -7,31 +8,6 @@ server {
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
-
-    # Redirigir todo lo demás a HTTPS
-    location / {
-        return 301 https://veterinariavilla.lat$request_uri;
-    }
-}
-
-# HTTPS — servidor principal
-server {
-    listen 443 ssl;
-    server_name veterinariavilla.lat;
-
-    # Certificados SSL (Let's Encrypt)
-    ssl_certificate /etc/letsencrypt/live/veterinariavilla.lat/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/veterinariavilla.lat/privkey.pem;
-
-    # Configuración SSL segura
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 10m;
-
-    # HSTS
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     root /usr/share/nginx/html;
     index index.html;
@@ -76,15 +52,3 @@ server {
         add_header Cache-Control "public, immutable";
     }
 }
-
-# HTTPS — redirigir www a raíz
-server {
-    listen 443 ssl;
-    server_name www.veterinariavilla.lat;
-
-    ssl_certificate /etc/letsencrypt/live/veterinariavilla.lat/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/veterinariavilla.lat/privkey.pem;
-
-    return 301 https://veterinariavilla.lat$request_uri;
-}
-

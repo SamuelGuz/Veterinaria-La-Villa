@@ -16,12 +16,65 @@ import {
   checkIdempotency,
   registerProcessedMessage,
 } from './idempotency.service';
-
-const prisma = new PrismaClient();
+import {
+  callGemini,
+  buildInitialContents,
+  appendFunctionRound,
+  isGeminiConfigured,
+  type GeminiContent,
+} from './gemini.service';
+import { callGroq, isGroqConfigured } from './groq.service';
+import {
+  getDashboardResumen,
+  getProductosStockBajo,
+} from './estadisticas.service';
+import prisma from '../config/database';
 
 // ============================================
 // Tipos
 // ============================================
+
+// Historial de conversación por teléfono (últimos N mensajes para contexto)
+const MAX_HISTORY_MESSAGES = 6; // 3 pares user/assistant
+const HISTORY_TTL_MS = 30 * 60 * 1000; // 30 minutos
+
+interface ConversationEntry {
+  contents: GeminiContent[];
+  updatedAt: number;
+}
+
+const conversationHistory = new Map<string, ConversationEntry>();
+
+/** Obtiene el historial reciente de un teléfono */
+function getHistory(telefono: string): GeminiContent[] {
+  const entry = conversationHistory.get(telefono);
+  if (!entry) return [];
+  // Expirar historial viejo
+  if (Date.now() - entry.updatedAt > HISTORY_TTL_MS) {
+    conversationHistory.delete(telefono);
+    return [];
+  }
+  return entry.contents;
+}
+
+/** Guarda historial de conversación (solo últimos N mensajes) */
+function saveHistory(telefono: string, contents: GeminiContent[]) {
+  // Mantener solo los últimos N contenidos
+  const trimmed = contents.slice(-MAX_HISTORY_MESSAGES);
+  conversationHistory.set(telefono, { contents: trimmed, updatedAt: Date.now() });
+}
+
+/** Limpia historiales expirados (llamar periódicamente) */
+function cleanupExpiredHistory() {
+  const now = Date.now();
+  for (const [tel, entry] of conversationHistory.entries()) {
+    if (now - entry.updatedAt > HISTORY_TTL_MS) {
+      conversationHistory.delete(tel);
+    }
+  }
+}
+// Cleanup cada 10 minutos
+setInterval(cleanupExpiredHistory, 10 * 60 * 1000);
 
 export interface WhatsAppMessage {
   messageId: string;
@@ -127,9 +180,11 @@ export async function sendWhatsAppMessage(
 ): Promise<boolean> {
   try {
     if (!whatsappConfig.accessToken || !whatsappConfig.phoneNumberId) {
-      console.warn('WhatsApp API not configured, message not sent:', message);
+      console.warn('[WhatsApp] API no configurada (token o phoneNumberId), mensaje NO enviado a', to);
       return false;
     }
+
+    console.log('[WhatsApp] Enviando mensaje a', to, '| preview:', message.slice(0, 60) + (message.length > 60 ? '...' : ''));
 
     const response = await axios.post(
       `${whatsappConfig.apiBaseUrl}/${whatsappConfig.phoneNumberId}/messages`,
@@ -325,6 +380,268 @@ export async function createMovement(
 // Procesador Principal de Mensajes
 // ============================================
 
+/** Máximo de rondas de herramientas por mensaje (evitar bucles) */
+const MAX_GEMINI_TOOL_ROUNDS = 5;
+
+/**
+ * Ejecuta una herramienta solicitada por Gemini y devuelve el resultado en texto/JSON para el modelo.
+ */
+async function executeGeminiTool(
+  name: string,
+  args: Record<string, unknown>,
+  telefono: string
+): Promise<string> {
+  const str = (v: unknown) => (v === undefined || v === null ? '' : String(v).trim());
+  const num = (v: unknown) => (typeof v === 'number' ? v : parseInt(String(v), 10) || 0);
+  const decimal = (v: unknown) => (typeof v === 'number' ? v : parseFloat(String(v)) || 0);
+
+  try {
+    switch (name) {
+      case 'search_products': {
+        const search_term = str(args.search_term);
+        const limit = num(args.limit) || 10;
+        if (!search_term) return JSON.stringify({ error: 'Falta search_term' });
+        const products = await searchProducts(search_term, Math.min(limit, 20));
+        return JSON.stringify({
+          count: products.length,
+          products: products.map((p) => ({
+            id: p.id,
+            nombre: p.nombre,
+            categoria: p.categoria?.nombre || 'Sin categoría',
+            stock: p.inventarioActual?.cantidadActual ?? 0,
+            stockMinimo: p.stockMinimo,
+            precioCompra: Number(p.precioCompra ?? 0),
+            precioVenta: Number(p.precioVenta ?? 0),
+          })),
+        });
+      }
+      case 'get_stock': {
+        const product_name_or_id = str(args.product_name_or_id);
+        if (!product_name_or_id) return JSON.stringify({ error: 'Falta product_name_or_id' });
+        const byId = /^\d+$/.test(product_name_or_id)
+          ? await getProductById(parseInt(product_name_or_id, 10))
+          : null;
+        const products = byId ? [byId] : await searchProducts(product_name_or_id, 5);
+        if (products.length === 0) return JSON.stringify({ error: 'Producto no encontrado. Intenta con otro nombre o busca con search_products.' });
+        if (products.length > 1) {
+          return JSON.stringify({
+            mensaje: 'Se encontraron varios productos. Sé más específico:',
+            productos: products.map((p) => ({
+              id: p.id,
+              nombre: p.nombre,
+              stock: p.inventarioActual?.cantidadActual ?? 0,
+            })),
+          });
+        }
+        const p = products[0];
+        const stock = p.inventarioActual?.cantidadActual ?? 0;
+        return JSON.stringify({
+          id: p.id,
+          nombre: p.nombre,
+          categoria: p.categoria?.nombre || 'Sin categoría',
+          cantidad_actual: stock,
+          stock_minimo: p.stockMinimo,
+          precioCompra: Number(p.precioCompra ?? 0),
+          precioVenta: Number(p.precioVenta ?? 0),
+          estado: stock <= 0 ? 'SIN_INVENTARIO' : stock <= p.stockMinimo ? 'BAJO' : 'OK',
+        });
+      }
+      case 'request_compra':
+      case 'request_venta':
+      case 'request_ajuste': {
+        const product_name = str(args.product_name);
+        const cantidad = name === 'request_ajuste' ? num(args.cantidad_delta) : num(args.cantidad);
+        if (!product_name) return JSON.stringify({ error: 'Falta nombre del producto' });
+        const products = await searchProducts(product_name, 5);
+        if (products.length === 0) return JSON.stringify({ error: 'Producto no encontrado' });
+        if (products.length > 1)
+          return JSON.stringify({
+            error: 'Varios productos coinciden; sé más específico.',
+            sugerencias: products.slice(0, 5).map((p) => p.nombre),
+          });
+        const product = products[0];
+        let precio = 0;
+        if (name === 'request_compra') {
+          precio = args.precio_unitario != null ? decimal(args.precio_unitario) : Number(product.precioCompra ?? 0);
+        } else if (name === 'request_venta') {
+          precio = args.precio_unitario != null ? decimal(args.precio_unitario) : Number(product.precioVenta ?? 0);
+        }
+        // request_ajuste: precio 0
+        const tipoOperacion = name === 'request_compra' ? 'COMPRA' : name === 'request_venta' ? 'VENTA' : 'AJUSTE';
+        if (tipoOperacion === 'VENTA') {
+          const stockActual = product.inventarioActual?.cantidadActual ?? 0;
+          if (cantidad > stockActual)
+            return JSON.stringify({
+              error: 'Stock insuficiente',
+              stock_actual: stockActual,
+              solicitado: cantidad,
+              producto: product.nombre,
+            });
+        }
+        if (tipoOperacion === 'AJUSTE' && cantidad < 0) {
+          const stockActual = product.inventarioActual?.cantidadActual ?? 0;
+          if (Math.abs(cantidad) > stockActual)
+            return JSON.stringify({
+              error: 'No se puede restar más de lo que hay en stock',
+              stock_actual: stockActual,
+              ajuste_solicitado: cantidad,
+              producto: product.nombre,
+            });
+        }
+        if ((tipoOperacion === 'COMPRA' || tipoOperacion === 'VENTA') && precio <= 0) {
+          return JSON.stringify({
+            error: `El producto "${product.nombre}" no tiene precio de ${tipoOperacion === 'COMPRA' ? 'compra' : 'venta'} registrado. Pide al usuario que indique el precio. Ejemplo: "${tipoOperacion === 'COMPRA' ? 'compra' : 'venta'} ${cantidad} ${product.nombre} [precio]"`,
+            producto: product.nombre,
+            stock_actual: product.inventarioActual?.cantidadActual ?? 0,
+          });
+        }
+        const token = await createPendingConfirmation(
+          telefono,
+          tipoOperacion,
+          product.id,
+          Math.abs(cantidad),
+          precio
+        );
+        const operacionNombre = tipoOperacion === 'COMPRA' ? 'Compra' : tipoOperacion === 'VENTA' ? 'Venta' : 'Ajuste';
+        return JSON.stringify({
+          ok: true,
+          mensaje_para_usuario: systemMessages.confirmationPrompt(
+            operacionNombre.toUpperCase(),
+            product.nombre,
+            Math.abs(cantidad),
+            precio,
+            token
+          ),
+          token,
+          producto: product.nombre,
+          cantidad: Math.abs(cantidad),
+          precio_unitario: precio,
+        });
+      }
+      case 'get_help':
+        return JSON.stringify({ mensaje_para_usuario: systemMessages.welcome });
+      case 'confirm_operation': {
+        const token = str(args.token).toUpperCase();
+        if (!token) return JSON.stringify({ error: 'Falta token' });
+        const confirmation = await findPendingConfirmation(token, telefono);
+        if (!confirmation)
+          return JSON.stringify({ error: 'Confirmación expirada o no encontrada. Que el usuario intente de nuevo.' });
+        const product = await getProductById(confirmation.productoId);
+        if (!product) {
+          await deleteConfirmation(confirmation.id);
+          return JSON.stringify({ error: 'Producto no encontrado' });
+        }
+        const movement = await createMovement(
+          confirmation.productoId,
+          confirmation.tipoOperacion,
+          confirmation.cantidad,
+          Number(confirmation.precioUnitario),
+          confirmation.distribuidorId ?? undefined,
+          confirmation.notas ?? undefined
+        );
+        await deleteConfirmation(confirmation.id);
+        const operacionNombre =
+          confirmation.tipoOperacion === 'COMPRA' ? 'Compra' : confirmation.tipoOperacion === 'VENTA' ? 'Venta' : 'Ajuste';
+        return JSON.stringify({
+          ok: true,
+          mensaje_para_usuario: systemMessages.operationSuccess(
+            operacionNombre,
+            product.nombre,
+            confirmation.cantidad,
+            Number(movement.total)
+          ),
+        });
+      }
+      case 'cancel_operation': {
+        await cancelPendingConfirmations(telefono);
+        return JSON.stringify({ ok: true, mensaje_para_usuario: systemMessages.operationCancelled });
+      }
+      case 'get_dashboard_resumen': {
+        try {
+          const resumen = await getDashboardResumen();
+          const formatMoney = (n: number) => `$${n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+          return JSON.stringify({
+            mensaje_para_usuario: `📊 *Resumen del Negocio*\n\n` +
+              `📦 *Productos:* ${resumen.productos.total} registrados (${resumen.productos.conStock} con stock)\n` +
+              `⚠️ *Stock bajo:* ${resumen.productos.stockBajo} productos\n` +
+              `💰 *Valor inventario:* ${formatMoney(resumen.inventario.valorTotal)}\n\n` +
+              `📅 *Este mes:*\n` +
+              `🛒 Compras: ${resumen.comprasMes.total} operaciones — ${formatMoney(resumen.comprasMes.monto)}\n` +
+              `💵 Ventas: ${resumen.ventasMes.total} operaciones — ${formatMoney(resumen.ventasMes.monto)}\n` +
+              `📋 Total movimientos: ${resumen.movimientosMes.total}\n\n` +
+              `🗂️ ${resumen.catalogos.categorias} categorías | ${resumen.catalogos.distribuidores} distribuidores`,
+          });
+        } catch (err: any) {
+          console.error('[WhatsApp] getDashboardResumen error:', err);
+          return JSON.stringify({ error: 'Error al obtener el resumen del negocio' });
+        }
+      }
+      case 'get_productos_stock_bajo': {
+        try {
+          const limit = num(args.limit) || 10;
+          const productos = await getProductosStockBajo();
+          const top = productos.slice(0, Math.min(limit, 20));
+          if (top.length === 0) {
+            return JSON.stringify({
+              mensaje_para_usuario: '✅ *¡Todo bien!* No hay productos con stock bajo en este momento.',
+            });
+          }
+          const lines = top.map((p, i) =>
+            `${i + 1}. *${p.nombre}* (${p.categoria})\n   📦 Stock: ${p.stockActual} | Mínimo: ${p.stockMinimo} | Faltan: ${p.diferencia}`
+          ).join('\n');
+          return JSON.stringify({
+            mensaje_para_usuario: `⚠️ *Productos con stock bajo (${top.length}):*\n\n${lines}` +
+              (productos.length > top.length ? `\n\n_...y ${productos.length - top.length} más_` : ''),
+          });
+        } catch (err: any) {
+          console.error('[WhatsApp] getProductosStockBajo error:', err);
+          return JSON.stringify({ error: 'Error al obtener productos con stock bajo' });
+        }
+      }
+      default:
+        return JSON.stringify({ error: `Herramienta desconocida: ${name}` });
+    }
+  } catch (err: any) {
+    console.error('[WhatsApp] executeGeminiTool error:', name, err);
+    return JSON.stringify({ error: err?.message || 'Error al ejecutar la herramienta' });
+  }
+}
+
+/**
+ * Procesa el mensaje usando Gemini como orquestador (todas las respuestas + herramientas).
+ * Incluye historial de conversación para contexto multi-turno.
+ */
+async function processWithGemini(userMessage: string, telefono: string): Promise<string> {
+  // Recuperar historial previo del usuario para dar contexto
+  const history = getHistory(telefono);
+  const newUserContent: GeminiContent = { role: 'user', parts: [{ text: userMessage }] };
+  let contents: GeminiContent[] = [...history, newUserContent];
+  let lastModelParts: Array<{ functionCall: { name: string; args: Record<string, unknown> } }> = [];
+
+  for (let round = 0; round < MAX_GEMINI_TOOL_ROUNDS; round++) {
+    const result = await callGemini(contents) || (isGroqConfigured() ? await callGroq(contents) : null);
+    if (!result) return systemMessages.processingError;
+
+    if (result.type === 'text') {
+      // Guardar historial: mensaje del usuario + respuesta del modelo
+      const finalContents = [
+        ...contents,
+        { role: 'model' as const, parts: [{ text: result.text }] },
+      ];
+      saveHistory(telefono, finalContents);
+      return result.text || systemMessages.invalidCommand;
+    }
+
+    const { name, args } = result;
+    console.log(`[WhatsApp] Gemini tool call: ${name}`, args);
+    const toolResult = await executeGeminiTool(name, args, telefono);
+    lastModelParts = [{ functionCall: { name, args } }];
+    contents = appendFunctionRound(contents, lastModelParts, name, toolResult);
+  }
+
+  return systemMessages.processingError;
+}
+
 /**
  * Procesa un mensaje de WhatsApp
  */
@@ -351,40 +668,39 @@ export async function processWhatsAppMessage(
     return response;
   }
 
-  // 3. Parsear comando
-  const command = parseCommand(text);
   let response: string;
 
   try {
-    switch (command.type) {
-      case 'AYUDA':
-        response = systemMessages.welcome;
-        break;
-
-      case 'BUSCAR':
-        response = await handleSearchCommand(command);
-        break;
-
-      case 'STOCK':
-        response = await handleStockCommand(command);
-        break;
-
-      case 'COMPRA':
-      case 'VENTA':
-      case 'AJUSTE':
-        response = await handleOperationCommand(command, telefono);
-        break;
-
-      case 'CONFIRMAR':
-        response = await handleConfirmCommand(command, telefono);
-        break;
-
-      case 'CANCELAR':
-        response = await handleCancelCommand(telefono);
-        break;
-
-      default:
-        response = systemMessages.invalidCommand;
+    if (isGeminiConfigured() || isGroqConfigured()) {
+      // Gemini (o Groq como fallback) responde a TODO y decide cuándo usar BD
+      response = await processWithGemini(text, telefono);
+    } else {
+      // Fallback: parser de comandos clásico
+      const command = parseCommand(text);
+      switch (command.type) {
+        case 'AYUDA':
+          response = systemMessages.welcome;
+          break;
+        case 'BUSCAR':
+          response = await handleSearchCommand(command);
+          break;
+        case 'STOCK':
+          response = await handleStockCommand(command);
+          break;
+        case 'COMPRA':
+        case 'VENTA':
+        case 'AJUSTE':
+          response = await handleOperationCommand(command, telefono);
+          break;
+        case 'CONFIRMAR':
+          response = await handleConfirmCommand(command, telefono);
+          break;
+        case 'CANCELAR':
+          response = await handleCancelCommand(telefono);
+          break;
+        default:
+          response = systemMessages.invalidCommand;
+      }
     }
   } catch (error) {
     console.error('[WhatsApp] Error processing command:', error);

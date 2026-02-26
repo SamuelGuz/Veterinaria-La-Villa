@@ -179,6 +179,33 @@ Para el número **57 300 3847821**, asegúrate de:
 - Solicita un nuevo código
 - Verifica que ingresaste el código correcto
 
+### Error: "Session has expired" (código 190)
+- El **token de acceso** ha caducado. Genera un **token permanente** en Meta:
+  - Meta for Developers → Tu app → WhatsApp → Configuración de la API → Token permanente
+- Actualiza `WHATSAPP_ACCESS_TOKEN` en `backend/.env` y en el servidor de producción.
+
+### Error: "Object does not exist / missing permissions" (código 100, subcode 33)
+- El token no tiene permisos sobre ese Phone Number ID, o el ID no existe.
+- Confirma que el token es de la misma app que tiene el número y que tiene permisos `whatsapp_business_management` y `whatsapp_business_messaging`.
+
+## 🛠️ Script: Verificar código y registrar número
+
+Desde la raíz del proyecto, con `backend/.env` configurado (o pasando el token por variable de entorno):
+
+```bash
+./scripts/verify-and-register-whatsapp.sh 269338
+```
+
+Con token explícito:
+
+```bash
+WHATSAPP_ACCESS_TOKEN="tu_token_permanente" ./scripts/verify-and-register-whatsapp.sh 269338
+```
+
+El script hace en orden: **verify_code** con el código y luego **register** con el mismo código como PIN.
+
+**Importante:** Usa un **token permanente** válido. Si el token expira, genera uno nuevo en Meta y actualiza `WHATSAPP_ACCESS_TOKEN`. La App Secret (`WHATSAPP_APP_SECRET`) está en el config por si Meta la pide en el futuro.
+
 ## 📚 Documentación Adicional
 
 - [WhatsApp Cloud API Documentation](https://developers.facebook.com/docs/whatsapp/cloud-api)

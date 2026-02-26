@@ -21,10 +21,11 @@ export async function verifyWebhook(req: Request, res: Response) {
 
     console.log('[WhatsApp Webhook] Verification request:', { mode, token });
 
-    // Verificar el token
+    // Verificar el token (Meta exige devolver hub.challenge como string en el body)
     if (mode === 'subscribe' && token === whatsappConfig.verifyToken) {
       console.log('[WhatsApp Webhook] Webhook verified successfully');
-      return res.status(200).send(challenge);
+      const challengeStr = challenge != null ? String(challenge) : '';
+      return res.status(200).type('text/plain').send(challengeStr);
     }
 
     console.warn('[WhatsApp Webhook] Webhook verification failed');
@@ -40,35 +41,40 @@ export async function verifyWebhook(req: Request, res: Response) {
  * Meta envía los mensajes a este endpoint
  */
 export async function receiveMessages(req: Request, res: Response) {
+  // Responder 200 SIEMPRE primero para que Meta no reintente
+  res.status(200).send('EVENT_RECEIVED');
+
+  const body = req.body || {};
+  const bodyKeys = Object.keys(body);
+
+  console.log('[WhatsApp Webhook] POST body keys:', bodyKeys.length ? bodyKeys.join(', ') : '(empty)');
+
   try {
-    // Responder inmediatamente con 200 para evitar reintentos de Meta
-    res.status(200).send('EVENT_RECEIVED');
+    if (bodyKeys.length === 0) {
+      console.log('[WhatsApp Webhook] Body vacío - ¿Content-Type correcto? Meta envía application/json');
+      return;
+    }
 
-    const body = req.body;
-
-    // Log del webhook recibido
-    console.log('[WhatsApp Webhook] Received webhook:', JSON.stringify(body, null, 2));
+    // Log del webhook recibido (solo si hay contenido)
+    console.log('[WhatsApp Webhook] Payload:', JSON.stringify(body, null, 2));
 
     // Extraer mensajes del webhook
     const messages = extractMessagesFromWebhook(body);
 
     if (messages.length === 0) {
-      console.log('[WhatsApp Webhook] No text messages to process');
+      console.log('[WhatsApp Webhook] No hay mensajes de texto en el payload (object/entry/changes/messages?)');
       return;
     }
 
-    // Procesar cada mensaje de forma asíncrona
     for (const message of messages) {
       try {
         await processWhatsAppMessage(message);
       } catch (error) {
         console.error('[WhatsApp Webhook] Error processing message:', error);
-        // Continuar con el siguiente mensaje
       }
     }
   } catch (error) {
     console.error('[WhatsApp Webhook] Error receiving webhook:', error);
-    // Ya respondimos 200, solo logueamos el error
   }
 }
 

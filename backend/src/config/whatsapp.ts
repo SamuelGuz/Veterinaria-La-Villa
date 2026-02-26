@@ -6,6 +6,9 @@ export const whatsappConfig = {
   // Token de acceso de WhatsApp Business API (se obtiene de Meta)
   accessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
   
+  // App Secret de la app de Meta (para app secret proof si se requiere)
+  appSecret: process.env.WHATSAPP_APP_SECRET || '',
+  
   // Phone Number ID de WhatsApp Business (se obtiene de Meta)
   phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
   

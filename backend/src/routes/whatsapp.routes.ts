@@ -2,7 +2,7 @@
 // Rutas de WhatsApp Webhook
 // ============================================
 
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import {
   verifyWebhook,
   receiveMessages,
@@ -10,6 +10,16 @@ import {
 } from '../controllers/whatsapp.controller';
 
 const router = Router();
+
+// Middleware: loguear TODA petición al webhook (GET y POST) para depurar
+router.use((req: Request, res: Response, next: NextFunction) => {
+  const ct = req.get('Content-Type') || '';
+  const bodyInfo = req.method === 'POST'
+    ? `body keys: [${Object.keys(req.body || {}).join(', ')}]`
+    : '';
+  console.log(`[Webhook] ${req.method} /webhook/whatsapp ${bodyInfo} Content-Type: ${ct}`);
+  next();
+});
 
 // Health check del webhook
 router.get('/health', webhookHealth);

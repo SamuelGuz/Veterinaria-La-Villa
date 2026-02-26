@@ -38,6 +38,12 @@ services:
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-VETERINARIA_LA_VILLA_2024}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      # IA Chatbot
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
     ports:
       - "3001:3001"
     depends_on:
@@ -55,11 +61,25 @@ services:
     container_name: veterinaria-frontend
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
     depends_on:
       - backend
     networks:
       - veterinaria-network
     restart: unless-stopped
+
+  # Certbot para certificados SSL
+  certbot:
+    image: certbot/certbot
+    container_name: veterinaria-certbot
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    networks:
+      - veterinaria-network
 
 networks:
   veterinaria-network:
@@ -67,4 +87,6 @@ networks:
 
 volumes:
   postgres_data:
+  certbot_certs:
+  certbot_www:
 

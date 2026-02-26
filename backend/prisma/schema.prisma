@@ -144,8 +144,7 @@ model NumeroAutorizado {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  // Relaciones
-  mensajes       MensajeProcesado[]
+  // Relaciones (MensajeProcesado ya no FK aquí para permitir idempotencia de cualquier número)
   confirmaciones ConfirmacionPendiente[]
 
   @@map("numeros_autorizados")
@@ -157,13 +156,10 @@ model NumeroAutorizado {
 model MensajeProcesado {
   id           Int      @id @default(autoincrement())
   messageId    String   @unique @map("message_id") @db.VarChar(100) // ID único del mensaje de WhatsApp
-  telefono     String   @db.VarChar(20)
+  telefono     String   @db.VarChar(20) // Sin FK: webhooks de prueba y números no autorizados también se registran
   hashMensaje  String   @map("hash_mensaje") @db.VarChar(64) // SHA-256 del contenido
   resultado    String   @db.Text // Respuesta enviada
   procesadoAt  DateTime @default(now()) @map("procesado_at")
-
-  // Relaciones
-  numeroAutorizado NumeroAutorizado? @relation(fields: [telefono], references: [telefono])
 
   @@index([telefono], name: "idx_mensajes_telefono")
   @@index([procesadoAt], name: "idx_mensajes_fecha")
