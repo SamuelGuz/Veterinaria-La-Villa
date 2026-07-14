@@ -17,7 +17,7 @@ export const config = {
   },
   
   // CORS
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  corsOrigin: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((o) => o.trim()),
   
   // Validaciones
   isProduction: process.env.NODE_ENV === 'production',
