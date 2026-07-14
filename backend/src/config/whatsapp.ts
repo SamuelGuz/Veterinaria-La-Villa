@@ -58,36 +58,38 @@ export const emojis = {
 
 // Mensajes del sistema
 export const systemMessages = {
-  welcome: `${emojis.wave} *¡Hola! Bienvenido al Bot de Veterinaria La Villa* ${emojis.paw}
+  welcome: `${emojis.wave} *¡Hola! Soy el asistente de Veterinaria La Villa* ${emojis.paw}
 
-Puedo ayudarte a registrar compras y ventas de inventario.
+Escríbeme normal, como le hablarías a una persona. Yo entiendo. Mira lo que puedo hacer:
 
-*Comandos disponibles:*
-${emojis.cart} *compra* - Registrar una compra
-${emojis.money} *venta* - Registrar una venta
-${emojis.search} *buscar* - Buscar un producto
-${emojis.box} *stock* - Ver stock de un producto
-${emojis.list} *ayuda* - Ver esta ayuda
+${emojis.cart} *Registrar compra* → _"llegaron 10 purina dog chow"_
+${emojis.money} *Registrar venta* → _"vendí 2 shampoo antipulgas"_
+${emojis.search} *Buscar producto* → _"busca vacuna"_
+${emojis.box} *Ver stock* → _"cuánto queda de desparasitante"_
+${emojis.warning} *Qué falta* → _"qué se está acabando"_
+${emojis.up} *Cómo va el negocio* → _"resumen del mes"_
 
-*Ejemplos:*
-• _compra 10 vacuna rabia 150.50_
-• _venta 5 desparasitante_
-• _buscar anti_
-• _stock vacuna_`,
+${emojis.info} Antes de registrar una compra o venta te muestro el detalle y te doy un *código* — me lo respondes y listo, quedó guardada.
+
+¿Empezamos? Prueba con: _"busca purina"_`,
 
   notAuthorized: `${emojis.error} *Acceso denegado*
 
 Tu número no está autorizado para usar este bot.
 Contacta al administrador para solicitar acceso.`,
 
-  invalidCommand: `${emojis.warning} *Comando no reconocido*
+  invalidCommand: `${emojis.think} No te entendí bien.
 
-Escribe *ayuda* para ver los comandos disponibles.`,
+Prueba con algo como:
+• _"vendí 2 shampoo antipulgas"_
+• _"cuánto queda de purina"_
 
-  productNotFound: `${emojis.search} *Producto no encontrado*
+O escribe *ayuda* para ver todo lo que puedo hacer.`,
 
-No encontré ningún producto con ese nombre.
-Intenta con otro término de búsqueda.`,
+  productNotFound: `${emojis.search} *No encontré ese producto*
+
+Intenta con UNA sola palabra del nombre (así encuentro más parecidos).
+Por ejemplo: _"busca purina"_ o _"busca vacuna"_`,
 
   multipleProductsFound: (count: number) => 
     `${emojis.warning} *Se encontraron ${count} productos*

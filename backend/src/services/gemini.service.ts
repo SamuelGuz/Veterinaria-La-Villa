@@ -5,6 +5,7 @@
 // Inspirado en el flujo del bot de referencia (andesai-prd-inter-restaurant-chatbot-admin).
 
 import axios from 'axios';
+import { BOT_SYSTEM_PROMPT } from '../config/botPrompt';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -47,78 +48,19 @@ export type GeminiResult =
   | { type: 'text'; text: string }
   | { type: 'function_call'; name: string; args: Record<string, unknown> };
 
-// System prompt: alcance, reglas de datos, herramientas, formato (prompt engineering)
-const SYSTEM_PROMPT = `Eres el asistente de WhatsApp de **Veterinaria La Villa**, una veterinaria y tienda de productos veterinarios ubicada en Colombia.
-
-<identity>
-- Nombre: Asistente Veterinaria La Villa
-- Especialidad: Gestión de inventario, compras, ventas y consultas de negocio
-- Idioma: Español colombiano (natural, breve para WhatsApp)
-- Personalidad: Amable, servicial, profesional, conciso. Tutea al usuario.
-- Formato: Mensajes cortos (1-4 líneas). Usa negritas (*texto*) para destacar. Emojis con moderación.
-</identity>
-
-<scope>
-**PUEDES responder sobre:**
-✅ Buscar productos en el inventario
-✅ Ver stock actual de un producto
-✅ Registrar compras (entrada de mercancía)
-✅ Registrar ventas (salida de mercancía)
-✅ Ajustes de inventario (correcciones)
-✅ Confirmar o cancelar operaciones pendientes
-✅ Resumen del negocio (dashboard): ventas del mes, compras, valor inventario
-✅ Productos con stock bajo (alertas)
-✅ Ayuda sobre cómo usar el bot
-
-**NUNCA debes:**
-❌ Inventar precios, nombres de productos, cantidades o datos que no vengan de las herramientas
-❌ Dar consejos médicos veterinarios
-❌ Responder sobre temas no relacionados con el inventario/negocio
-❌ Modificar datos sin confirmación del usuario
-❌ Asumir precios si el sistema devuelve precio 0 — pregunta al usuario
-</scope>
-
-<data_integrity>
-REGLA FUNDAMENTAL: Toda información sobre productos, precios, stock y estadísticas DEBE venir de las herramientas. JAMÁS inventes datos.
-
-- Para buscar productos: usa search_products. Muestra los resultados tal como vienen.
-- Para ver stock: usa get_stock. Si no encuentra el producto, dile al usuario que intente con otro nombre.
-- Para compra/venta/ajuste: usa request_compra, request_venta o request_ajuste. El sistema genera un código de confirmación (ej: SI1234). El usuario debe responder con ese código para confirmar.
-- Si el precio del producto es $0 o no tiene precio, PREGÚNTALE al usuario el precio antes de hacer la operación. No registres operaciones a precio $0 sin avisar.
-- Cuando una herramienta devuelva "mensaje_para_usuario", responde EXACTAMENTE con ese texto. No lo modifiques ni parafrasees.
-- Para ver el resumen del negocio: usa get_dashboard_resumen.
-- Para ver productos con stock bajo: usa get_productos_stock_bajo.
-</data_integrity>
-
-<tool_selection>
-Mapeo de intenciones a herramientas:
-- "buscar X", "qué hay de X", "tienen X", "productos de X" → search_products
-- "stock de X", "cuánto hay de X", "cuántas unidades de X" → get_stock
-- "compra N X", "compré N X", "llegaron N X", "entrada de N X" → request_compra
-- "venta N X", "vendí N X", "salida de N X", "se vendieron N X" → request_venta
-- "ajuste N X", "ajustar X", "corregir stock de X" → request_ajuste
-- "ayuda", "comandos", "menú", "hola", "qué puedes hacer" → get_help
-- Código tipo "SI1234" o "SI ABCD" → confirm_operation
-- "cancelar", "no", "no quiero", "olvídalo" → cancel_operation
-- "resumen", "cómo va el negocio", "dashboard", "estadísticas", "ventas del mes" → get_dashboard_resumen
-- "stock bajo", "alertas", "qué falta", "productos agotados" → get_productos_stock_bajo
-
-Si no estás seguro del producto exacto, usa search_products primero para encontrarlo.
-Si el usuario usa lenguaje informal o abreviaciones, interpreta la intención y usa la herramienta correcta.
-</tool_selection>
-
-Responde siempre en español. Sé breve y directo, esto es WhatsApp.`;
+// System prompt compartido con Groq (ver config/botPrompt.ts)
+const SYSTEM_PROMPT = BOT_SYSTEM_PROMPT;
 
 // Declaraciones de herramientas para la API de Gemini (function calling)
 function getToolDeclarations(): object[] {
   return [
     {
       name: 'search_products',
-      description: 'Busca productos en el inventario por nombre o término. Usar cuando el usuario quiera buscar, listar o encontrar productos.',
+      description: 'Busca productos del inventario por nombre parcial. Usar cuando el usuario quiera buscar/listar productos ("buscar X", "qué tienen de X") Y TAMBIÉN antes de una compra/venta/ajuste/stock si no conoces el nombre exacto del producto en el sistema. Ej: "llegaron 10 purinas" → search_products("purina") primero.',
       parameters: {
         type: 'OBJECT',
         properties: {
-          search_term: { type: 'STRING', description: 'Término de búsqueda (nombre o parte del nombre del producto)' },
+          search_term: { type: 'STRING', description: 'Una o dos palabras clave del nombre, sin cantidades. Ej: "vacuna rabia", "purina", "shampoo"' },
           limit: { type: 'INTEGER', description: 'Máximo de resultados (default 10)' },
         },
         required: ['search_term'],
@@ -126,83 +68,83 @@ function getToolDeclarations(): object[] {
     },
     {
       name: 'get_stock',
-      description: 'Obtiene el stock actual de un producto por nombre o ID. Usar cuando pregunten cuánto hay, stock, inventario de un producto.',
+      description: 'Devuelve el stock actual de UN producto. Usar cuando pregunten cuánto hay/queda de algo: "stock de X", "cuánto queda de X", "hay X?".',
       parameters: {
         type: 'OBJECT',
         properties: {
-          product_name_or_id: { type: 'STRING', description: 'Nombre del producto o ID numérico' },
+          product_name_or_id: { type: 'STRING', description: 'Nombre (o parte) del producto, o su ID numérico. Ej: "desparasitante", "45"' },
         },
         required: ['product_name_or_id'],
       },
     },
     {
       name: 'request_compra',
-      description: 'Solicita registrar una compra (entrada de inventario). El sistema pedirá confirmación al usuario. Usar cuando digan "compra N producto" o similar.',
+      description: 'Inicia el registro de una COMPRA (entrada de mercancía; el inventario SUBE). El sistema responde con un código de confirmación para el usuario. Usar con: "compra", "compré", "llegaron", "entraron", "pedido que llegó", "reponer".',
       parameters: {
         type: 'OBJECT',
         properties: {
-          product_name: { type: 'STRING', description: 'Nombre del producto a comprar' },
-          cantidad: { type: 'INTEGER', description: 'Cantidad a comprar' },
-          precio_unitario: { type: 'NUMBER', description: 'Precio por unidad (opcional; si no se da, se usa el del producto)' },
+          product_name: { type: 'STRING', description: 'Nombre del producto tal como existe en el sistema (usa search_products si dudas). Ej: "Purina Dog Chow 2kg"' },
+          cantidad: { type: 'INTEGER', description: 'Unidades que entran. Ej: 10' },
+          precio_unitario: { type: 'NUMBER', description: 'Precio de compra por unidad en pesos. Solo si el usuario lo dice; si no, se usa el del sistema. Ej: 15000' },
         },
         required: ['product_name', 'cantidad'],
       },
     },
     {
       name: 'request_venta',
-      description: 'Solicita registrar una venta (salida de inventario). El sistema pedirá confirmación. Usar cuando digan "venta N producto" o similar.',
+      description: 'Inicia el registro de una VENTA (salida de mercancía; el inventario BAJA). El sistema responde con un código de confirmación. Usar con: "venta", "vendí", "se vendieron", "salieron", "se llevaron", "facturar".',
       parameters: {
         type: 'OBJECT',
         properties: {
-          product_name: { type: 'STRING', description: 'Nombre del producto a vender' },
-          cantidad: { type: 'INTEGER', description: 'Cantidad a vender' },
-          precio_unitario: { type: 'NUMBER', description: 'Precio por unidad (opcional)' },
+          product_name: { type: 'STRING', description: 'Nombre del producto tal como existe en el sistema (usa search_products si dudas). Ej: "Shampoo antipulgas 500ml"' },
+          cantidad: { type: 'INTEGER', description: 'Unidades vendidas. Ej: 2' },
+          precio_unitario: { type: 'NUMBER', description: 'Precio de venta por unidad en pesos. Solo si el usuario lo dice. Ej: 25000' },
         },
         required: ['product_name', 'cantidad'],
       },
     },
     {
       name: 'request_ajuste',
-      description: 'Solicita un ajuste de inventario (cantidad positiva o negativa). Pide confirmación. Usar para correcciones de stock.',
+      description: 'Inicia una CORRECCIÓN manual de stock (no es compra ni venta): conteo físico distinto, producto dañado/vencido/perdido. Pide confirmación. Usar con: "ajusta", "corrige el stock", "se dañaron", "se vencieron", "sobran/faltan en el conteo".',
       parameters: {
         type: 'OBJECT',
         properties: {
-          product_name: { type: 'STRING', description: 'Nombre del producto' },
-          cantidad_delta: { type: 'INTEGER', description: 'Cantidad a sumar (positivo) o restar (negativo)' },
-          motivo: { type: 'STRING', description: 'Motivo del ajuste (opcional)' },
+          product_name: { type: 'STRING', description: 'Nombre del producto en el sistema' },
+          cantidad_delta: { type: 'INTEGER', description: 'Unidades a sumar (positivo) o restar (negativo). Ej: -3 si se dañaron 3' },
+          motivo: { type: 'STRING', description: 'Motivo corto del ajuste. Ej: "vencidos", "conteo físico"' },
         },
         required: ['product_name', 'cantidad_delta'],
       },
     },
     {
       name: 'get_help',
-      description: 'Obtiene la lista de comandos y ejemplos de uso. Usar cuando pidan ayuda, comandos, menú o no sepan qué hacer.',
+      description: 'Devuelve el menú de ayuda con ejemplos de uso. Usar en el primer "hola", con "ayuda", "menú", "qué puedes hacer", o si el usuario está perdido/confundido.',
       parameters: { type: 'OBJECT', properties: {} },
     },
     {
       name: 'confirm_operation',
-      description: 'Confirma una operación pendiente (compra/venta/ajuste) cuando el usuario escribe el código de confirmación (ej. SI1234).',
+      description: 'Ejecuta la operación pendiente cuando el usuario escribe SU código de confirmación. Usar SIEMPRE que el mensaje sea (o contenga) un código tipo SI+4 dígitos: "SI1234", "si 1234", "confirmo SI1234".',
       parameters: {
         type: 'OBJECT',
         properties: {
-          token: { type: 'STRING', description: 'Código de confirmación de 6 caracteres (ej. SI1234)' },
+          token: { type: 'STRING', description: 'El código tal cual, normalizado sin espacios y en mayúsculas. Ej: "SI1234"' },
         },
         required: ['token'],
       },
     },
     {
       name: 'cancel_operation',
-      description: 'Cancela cualquier confirmación pendiente del usuario. Usar cuando digan cancelar, no, o desistan.',
+      description: 'Cancela la confirmación pendiente del usuario. Usar con: "cancelar", "cancela", "no", "mejor no", "olvídalo", "me equivoqué" cuando haya una operación esperando código.',
       parameters: { type: 'OBJECT', properties: {} },
     },
     {
       name: 'get_dashboard_resumen',
-      description: 'Obtiene el resumen general del negocio: ventas del mes, compras del mes, valor del inventario, total de productos, productos con stock bajo. Usar cuando pregunten "cómo va el negocio", "resumen", "dashboard", "estadísticas", "ventas del mes".',
+      description: 'Resumen general del negocio: ventas y compras del mes, valor del inventario, totales y alertas. Usar con: "cómo va el negocio", "resumen", "dashboard", "estadísticas", "ventas del mes", "cuánto hemos vendido".',
       parameters: { type: 'OBJECT', properties: {} },
     },
     {
       name: 'get_productos_stock_bajo',
-      description: 'Obtiene la lista de productos con stock bajo o agotados. Usar cuando pregunten "qué falta", "stock bajo", "alertas", "productos agotados", "qué se está acabando".',
+      description: 'Lista los productos con stock bajo o agotados (los que hay que reponer). Usar con: "qué falta", "stock bajo", "qué se está acabando", "alertas", "agotados", "qué hay que pedir".',
       parameters: {
         type: 'OBJECT',
         properties: {
@@ -245,7 +187,8 @@ export async function callGemini(contents: GeminiContent[]): Promise<GeminiResul
     tools: [{ functionDeclarations: getToolDeclarations() }],
     generationConfig: {
       maxOutputTokens: 512,
-      temperature: 0.3,
+      // Baja para tool-calling: selección de herramienta más determinista, menos alucinación
+      temperature: 0.1,
     },
   };
 

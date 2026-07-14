@@ -6,31 +6,26 @@
 
 import axios from 'axios';
 import type { GeminiContent, GeminiResult } from './gemini.service';
+import { BOT_SYSTEM_PROMPT } from '../config/botPrompt';
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
-const SYSTEM_PROMPT = `Eres el asistente de WhatsApp de **Veterinaria La Villa**, una veterinaria y tienda de productos veterinarios en Colombia.
-Responde SIEMPRE en español colombiano, breve (1-4 frases para WhatsApp). Tutea al usuario, sé amable y profesional.
-Usa las herramientas para buscar productos, stock, compra, venta, ajuste, resumen del negocio, stock bajo, ayuda, confirmar o cancelar.
-NUNCA inventes precios, nombres de productos ni cantidades. Toda información DEBE venir de las herramientas.
-Si el precio del producto es $0, pregúntale al usuario el precio antes de registrar.
-Cuando una herramienta devuelva "mensaje_para_usuario", responde con ESE texto tal cual sin modificarlo.
-Si el usuario pregunta por estadísticas, ventas del mes, cómo va el negocio o resumen, usa get_dashboard_resumen.
-Si pregunta por productos agotados, qué falta o stock bajo, usa get_productos_stock_bajo.`;
+// System prompt compartido con Gemini (ver config/botPrompt.ts)
+const SYSTEM_PROMPT = BOT_SYSTEM_PROMPT;
 
 const TOOLS_OPENAI = [
-  { type: 'function' as const, function: { name: 'search_products', description: 'Busca productos por nombre.', parameters: { type: 'object' as const, properties: { search_term: { type: 'string' as const }, limit: { type: 'integer' as const } }, required: ['search_term'] as const } } },
-  { type: 'function' as const, function: { name: 'get_stock', description: 'Stock actual de un producto.', parameters: { type: 'object' as const, properties: { product_name_or_id: { type: 'string' as const } }, required: ['product_name_or_id'] as const } } },
-  { type: 'function' as const, function: { name: 'request_compra', description: 'Registrar compra (pedirá confirmación).', parameters: { type: 'object' as const, properties: { product_name: { type: 'string' as const }, cantidad: { type: 'integer' as const }, precio_unitario: { type: 'number' as const } }, required: ['product_name', 'cantidad'] as const } } },
-  { type: 'function' as const, function: { name: 'request_venta', description: 'Registrar venta (pedirá confirmación).', parameters: { type: 'object' as const, properties: { product_name: { type: 'string' as const }, cantidad: { type: 'integer' as const }, precio_unitario: { type: 'number' as const } }, required: ['product_name', 'cantidad'] as const } } },
-  { type: 'function' as const, function: { name: 'request_ajuste', description: 'Ajuste de inventario.', parameters: { type: 'object' as const, properties: { product_name: { type: 'string' as const }, cantidad_delta: { type: 'integer' as const }, motivo: { type: 'string' as const } }, required: ['product_name', 'cantidad_delta'] as const } } },
-  { type: 'function' as const, function: { name: 'get_help', description: 'Lista de comandos y ayuda.', parameters: { type: 'object' as const, properties: {} } } },
-  { type: 'function' as const, function: { name: 'confirm_operation', description: 'Confirma operación con token (ej. SI1234).', parameters: { type: 'object' as const, properties: { token: { type: 'string' as const } }, required: ['token'] as const } } },
-  { type: 'function' as const, function: { name: 'cancel_operation', description: 'Cancela confirmación pendiente.', parameters: { type: 'object' as const, properties: {} } } },
+  { type: 'function' as const, function: { name: 'search_products', description: 'Busca productos por nombre parcial. Usar para "buscar X" y también ANTES de compra/venta/stock si no conoces el nombre exacto. Ej: "llegaron purinas" → search_products("purina").', parameters: { type: 'object' as const, properties: { search_term: { type: 'string' as const, description: 'Palabras clave sin cantidades. Ej: "vacuna rabia"' }, limit: { type: 'integer' as const } }, required: ['search_term'] as const } } },
+  { type: 'function' as const, function: { name: 'get_stock', description: 'Stock actual de UN producto. Usar con "cuánto hay/queda de X", "stock de X".', parameters: { type: 'object' as const, properties: { product_name_or_id: { type: 'string' as const, description: 'Nombre (o parte) o ID numérico' } }, required: ['product_name_or_id'] as const } } },
+  { type: 'function' as const, function: { name: 'request_compra', description: 'Inicia registro de COMPRA (entrada, inventario sube); devuelve código de confirmación. Usar con "compra/compré/llegaron/entraron N X".', parameters: { type: 'object' as const, properties: { product_name: { type: 'string' as const, description: 'Nombre tal como existe en el sistema' }, cantidad: { type: 'integer' as const }, precio_unitario: { type: 'number' as const, description: 'Solo si el usuario lo dice' } }, required: ['product_name', 'cantidad'] as const } } },
+  { type: 'function' as const, function: { name: 'request_venta', description: 'Inicia registro de VENTA (salida, inventario baja); devuelve código de confirmación. Usar con "venta/vendí/salieron/se llevaron N X".', parameters: { type: 'object' as const, properties: { product_name: { type: 'string' as const, description: 'Nombre tal como existe en el sistema' }, cantidad: { type: 'integer' as const }, precio_unitario: { type: 'number' as const, description: 'Solo si el usuario lo dice' } }, required: ['product_name', 'cantidad'] as const } } },
+  { type: 'function' as const, function: { name: 'request_ajuste', description: 'Corrección manual de stock (dañados, vencidos, conteo físico). Usar con "ajusta/corrige/se dañaron/se vencieron".', parameters: { type: 'object' as const, properties: { product_name: { type: 'string' as const }, cantidad_delta: { type: 'integer' as const, description: 'Positivo suma, negativo resta. Ej: -3' }, motivo: { type: 'string' as const } }, required: ['product_name', 'cantidad_delta'] as const } } },
+  { type: 'function' as const, function: { name: 'get_help', description: 'Menú de ayuda con ejemplos. Usar en "hola", "ayuda", "menú" o si el usuario está perdido.', parameters: { type: 'object' as const, properties: {} } } },
+  { type: 'function' as const, function: { name: 'confirm_operation', description: 'Ejecuta la operación pendiente. Usar SIEMPRE que el mensaje contenga un código tipo SI+4 dígitos ("SI1234", "si 1234").', parameters: { type: 'object' as const, properties: { token: { type: 'string' as const, description: 'Código sin espacios y en mayúsculas. Ej: "SI1234"' } }, required: ['token'] as const } } },
+  { type: 'function' as const, function: { name: 'cancel_operation', description: 'Cancela la confirmación pendiente. Usar con "cancelar", "no", "mejor no", "olvídalo".', parameters: { type: 'object' as const, properties: {} } } },
   { type: 'function' as const, function: { name: 'get_dashboard_resumen', description: 'Resumen del negocio: ventas, compras, inventario, alertas. Usar cuando pregunten "cómo va el negocio", "resumen", "estadísticas", "ventas del mes".', parameters: { type: 'object' as const, properties: {} } } },
-  { type: 'function' as const, function: { name: 'get_productos_stock_bajo', description: 'Lista de productos con stock bajo o agotados.', parameters: { type: 'object' as const, properties: { limit: { type: 'integer' as const } } } } },
+  { type: 'function' as const, function: { name: 'get_productos_stock_bajo', description: 'Productos con stock bajo o agotados (qué reponer). Usar con "qué falta", "qué se está acabando", "agotados".', parameters: { type: 'object' as const, properties: { limit: { type: 'integer' as const } } } } },
 ];
 
 /** Convierte historial Gemini (contents) a mensajes OpenAI para Groq */
@@ -90,7 +85,8 @@ export async function callGroq(contents: GeminiContent[]): Promise<GeminiResult 
         tools: TOOLS_OPENAI,
         tool_choice: 'auto',
         max_tokens: 512,
-        temperature: 0.3,
+        // Baja para tool-calling: selección de herramienta más determinista
+        temperature: 0.1,
       },
       {
         headers: {
